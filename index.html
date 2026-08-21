@@ -47,7 +47,14 @@
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
 </script>
-
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh",
+    "react/jsx-runtime": "https://esm.sh/jsx-runtime"
+  }
+}
+</script>
 <script data-type="module" data-presets="react" data-runtime="classic" type="text/babel" data-presets="react,stage-3">
 const { useState, useEffect, useMemo } = React;
 
