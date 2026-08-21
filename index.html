@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>FlagStat Coach</title>
+
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="FlagStat" />
+<meta name="theme-color" content="#14171F" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2236%22%20fill%3D%22%2314171F%22/%3E%3Ctext%20x%3D%2290%22%20y%3D%22122%22%20font-size%3D%2296%22%20text-anchor%3D%22middle%22%3E%F0%9F%9A%A9%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2236%22%20fill%3D%22%2314171F%22/%3E%3Ctext%20x%3D%2290%22%20y%3D%22122%22%20font-size%3D%2296%22%20text-anchor%3D%22middle%22%3E%F0%9F%9A%A9%3C/text%3E%3C/svg%3E" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  html, body { background:#14171F; color:#F5F4EF; overscroll-behavior-y: none; }
+  #root { min-height: 100vh; }
+  input, select, textarea, button { font-size: 16px; }
+</style>
+</head>
+<body class="bg-ink">
+<div id="root"></div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID",
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  const FieldValue = firebase.firestore.FieldValue;
+</script>
+
+<script type="text/babel" data-presets="react,stage-3">
+const { useState, useEffect, useMemo } = React;
+
+// ============================================================
+// lightweight icon stand-ins (no icon library dependency)
+// ============================================================
+function Icon({ children, size = 16, className = "" }) {
+  return <span className={className} style={{ fontSize: size, lineHeight: 1, display: "inline-block" }}>{children}</span>;
+}
+const Flag = (p) => <Icon {...p}>{"\u{1F6A9}"}</Icon>;
+const Lock = (p) => <Icon {...p}>{"\u{1F512}"}</Icon>;
+const User = (p) => <Icon {...p}>{"\u{1F464}"}</Icon>;
+const Plus = (p) => <Icon {...p}>+</Icon>;
+const Trash2 = (p) => <Icon {...p}>{"\u{1F5D1}"}</Icon>;
+const ChevronRight = (p) => <Icon {...p}>{"\u203A"}</Icon>;
+const ChevronLeft = (p) => <Icon {...p}>{"\u2039"}</Icon>;
+const Play = (p) => <Icon {...p}>{"\u25B6"}</Icon>;
+const Shield = (p) => <Icon {...p}>{"\u{1F6E1}"}</Icon>;
+const TrendingUp = (p) => <Icon {...p}>{"\u{1F4C8}"}</Icon>;
+const RotateCcw = (p) => <Icon {...p}>{"\u21BA"}</Icon>;
+const Award = (p) => <Icon {...p}>{"\u{1F3C6}"}</Icon>;
+const Users = (p) => <Icon {...p}>{"\u{1F465}"}</Icon>;
+const Settings = (p) => <Icon {...p}>{"\u2699"}</Icon>;
+const ArrowLeftRight = (p) => <Icon {...p}>{"\u21C4"}</Icon>;
+const CircleDot = (p) => <Icon {...p}>{"\u25CF"}</Icon>;
+const X = (p) => <Icon {...p}>{"\u2715"}</Icon>;
+const Check = (p) => <Icon {...p}>{"\u2713"}</Icon>;
+const LogOut = (p) => <Icon {...p}>{"\u23FB"}</Icon>;
+const Loader2 = (p) => <Icon {...p} className={`${p.className || ""} animate-spin`}>{"\u25E1"}</Icon>;
+const Pencil = (p) => <Icon {...p}>{"\u270E"}</Icon>;
+const Download = (p) => <Icon {...p}>{"\u2B07"}</Icon>;
+const RefreshCcw = (p) => <Icon {...p}>{"\u21BB"}</Icon>;
+const SkipForward = (p) => <Icon {...p}>{"\u23ED"}</Icon>;
+const AlertTriangle = (p) => <Icon {...p}>{"\u26A0"}</Icon>;
+const Sparkles = (p) => <Icon {...p}>{"\u2728"}</Icon>;
+
+const FIELD_LENGTHS = [40, 50, 60, 70, 80, 100];
+const FIELD_WIDTHS = [25, 30, 35, 40, 53];
+const PLAY_TYPES = [
+  { id: "run", label: "Run", color: "bg-green", modal: true, needsYards: true, needsPlayer: true, yardsLabel: "Yards gained" },
+  { id: "pass_complete", label: "Pass Complete", color: "bg-green", modal: true, needsYards: true, needsPlayer: true, yardsLabel: "Yards gained" },
+  { id: "pass_incomplete", label: "Pass Incomplete", color: "bg-blue", modal: true, needsYards: false, needsPlayer: true },
+  { id: "sack", label: "Sack", color: "bg-red", modal: true, needsYards: true, needsPlayer: true, yardsLabel: "Yards lost" },
+  { id: "interception", label: "Interception", color: "bg-red", modal: true, needsYards: true, needsPlayer: true, yardsLabel: "Return yards" },
+  { id: "fumble", label: "Fumble Lost", color: "bg-red", modal: true, needsYards: true, needsPlayer: true, yardsLabel: "Return yards" },
+  { id: "touchdown", label: "Touchdown", color: "bg-gold text-ink", modal: true, needsYards: false, needsPlayer: true },
+  { id: "penalty", label: "Penalty", color: "bg-blue", modal: true, needsYards: true, needsPlayer: false, yardsLabel: "Penalty yards", needsOn: true },
+  { id: "turnover_on_downs", label: "Turnover on Downs", color: "bg-red", modal: false },
+  { id: "safety", label: "Safety", color: "bg-red", modal: false },
+];
+const PLAY_LABELS = Object.fromEntries(PLAY_TYPES.map((p) => [p.id, p.label]));
+PLAY_LABELS.pat1 = "PAT (1pt)";
+PLAY_LABELS.pat2 = "PAT (2pt)";
+PLAY_LABELS.quarter_end = "End of quarter";
+PLAY_LABELS.possession_change = "Possession change";
+
+// ============================================================
+// game engine — plays are the single source of truth.
+// Score, down, distance, ball position, and possession are all
+// derived by folding over the play log. This makes undo, mid-log
+// edits, and post-game corrections all safe by construction.
+// ============================================================
+function applyPlayToState(state, play, settings) {
+  const { down, ballOn, setStartYard, possession, quarter, score, pendingPAT } = state;
+
+  if (play.type === "quarter_end") {
+    return { ...state, quarter: Math.min(4, quarter + 1) };
+  }
+  if (play.type === "possession_change") {
+    return { ...state, possession: possession === "us" ? "them" : "us", down: 1, setStartYard: ballOn };
+  }
+  if (play.type === "pat1" || play.type === "pat2") {
+    let newScore = score;
+    if (play.result === "good") {
+      const pts = play.type === "pat2" ? 2 : 1;
+      newScore = { ...score, [pendingPAT]: (score[pendingPAT] || 0) + pts };
+    }
+    const mid = Math.round(settings.fieldLength / 2);
+    return {
+      ...state,
+      score: newScore,
+      pendingPAT: null,
+      possession: pendingPAT === "us" ? "them" : "us",
+      down: 1,
+      ballOn: mid,
+      setStartYard: mid,
+    };
+  }
+  if (play.type === "safety") {
+    const other = possession === "us" ? "them" : "us";
+    const mid = Math.round(settings.fieldLength / 2);
+    return {
+      ...state,
+      score: { ...score, [other]: (score[other] || 0) + 2 },
+      possession: other,
+      down: 1,
+      ballOn: mid,
+      setStartYard: mid,
+    };
+  }
+  if (play.type === "touchdown") {
+    const mid = Math.round(settings.fieldLength / 2);
+    return {
+      ...state,
+      score: { ...score, [possession]: (score[possession] || 0) + settings.touchdownPoints },
+      ballOn: possession === "us" ? settings.fieldLength : 0,
+      pendingPAT: possession,
+    };
+  }
+  if (play.type === "turnover_on_downs") {
+    return { ...state, possession: possession === "us" ? "them" : "us", down: 1, setStartYard: ballOn };
+  }
+  if (play.type === "interception" || play.type === "fumble") {
+    const ret = Number(play.yards) || 0;
+    const newBallOn = clamp(possession === "us" ? ballOn - ret : ballOn + ret, 0, settings.fieldLength);
+    return { ...state, ballOn: newBallOn, possession: possession === "us" ? "them" : "us", down: 1, setStartYard: newBallOn };
+  }
+  if (play.type === "penalty") {
+    const yards = Number(play.yards) || 0;
+    const dir = possession === "us" ? 1 : -1;
+    const sign = play.on === "them" ? dir : -dir;
+    const newBallOn = clamp(ballOn + sign * yards, 0, settings.fieldLength);
+    return { ...state, ballOn: newBallOn };
+  }
+  if (play.type === "pass_incomplete") {
+    const newDown = down + 1;
+    if (newDown > settings.numDowns) {
+      return { ...state, possession: possession === "us" ? "them" : "us", down: 1, setStartYard: ballOn };
+    }
+    return { ...state, down: newDown };
+  }
+  if (["run", "pass_complete", "sack"].includes(play.type)) {
+    const yards = Number(play.yards) || 0;
+    const newBallOn = clamp(possession === "us" ? ballOn + yards : ballOn - yards, 0, settings.fieldLength);
+    const reachedGoal = possession === "us" ? newBallOn >= settings.fieldLength : newBallOn <= 0;
+    if (reachedGoal) {
+      return {
+        ...state,
+        score: { ...score, [possession]: (score[possession] || 0) + settings.touchdownPoints },
+        ballOn: possession === "us" ? settings.fieldLength : 0,
+        pendingPAT: possession,
+      };
+    }
+    let firstDownGained;
+    if (settings.firstDownMode === "midfield") {
+      const half = settings.fieldLength / 2;
+      const wasBefore = possession === "us" ? ballOn <= half : ballOn >= half;
+      const isNowPast = possession === "us" ? newBallOn > half : newBallOn < half;
+      firstDownGained = wasBefore && isNowPast;
+    } else {
+      const gained = possession === "us" ? newBallOn - setStartYard : setStartYard - newBallOn;
+      firstDownGained = gained >= settings.yardsPerFirstDown;
+    }
+    if (firstDownGained) {
+      return { ...state, ballOn: newBallOn, down: 1, setStartYard: newBallOn };
+    }
+    const newDown = down + 1;
+    if (newDown > settings.numDowns) {
+      return { ...state, ballOn: newBallOn, possession: possession === "us" ? "them" : "us", down: 1, setStartYard: newBallOn };
+    }
+    return { ...state, ballOn: newBallOn, down: newDown };
+  }
+  return state;
+}
+
+function computeState(game) {
+  const settings = game.teamSettings;
+  const mid = Math.round(settings.fieldLength / 2);
+  let state = {
+    down: 1,
+    ballOn: mid,
+    setStartYard: mid,
+    possession: game.initialPossession || "us",
+    quarter: 1,
+    score: { us: 0, them: 0 },
+    pendingPAT: null,
+  };
+  for (const p of game.plays) state = applyPlayToState(state, p, settings);
+  return state;
+}
+
+function computePlayerStats(plays) {
+  const totals = {};
+  for (const p of plays) {
+    if (!p.playerId) continue;
+    totals[p.playerId] = totals[p.playerId] || { yards: 0, tds: 0, touches: 0, turnovers: 0 };
+    if (typeof p.yards === "number" && ["run", "pass_complete", "sack"].includes(p.type)) totals[p.playerId].yards += p.yards;
+    if (["run", "pass_complete"].includes(p.type)) totals[p.playerId].touches += 1;
+    if (p.type === "touchdown") totals[p.playerId].tds += 1;
+    if (["interception", "fumble"].includes(p.type)) totals[p.playerId].turnovers += 1;
+  }
+  return totals;
+}
+
+function computeRecord(games) {
+  let w = 0, l = 0, t = 0, pf = 0, pa = 0;
+  const finals = games.filter((g) => g.status === "final");
+  finals.forEach((g) => {
+    const s = computeState(g).score;
+    pf += s.us; pa += s.them;
+    if (s.us > s.them) w++;
+    else if (s.us < s.them) l++;
+    else t++;
+  });
+  return { w, l, t, pf, pa, played: finals.length };
+}
+
+function downloadCSV(filename, rows) {
+  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+const DEMO_TEAM = {
+  name: "Demo Squad",
+  fieldLength: 70,
+  fieldWidth: 30,
+  numDowns: 4,
+  firstDownMode: "midfield",
+  yardsPerFirstDown: 15,
+  touchdownPoints: 6,
+  roster: [
+    { id: uid(), name: "Jordan Lee", number: "7" },
+    { id: uid(), name: "Sam Rivera", number: "12" },
+    { id: uid(), name: "Casey Kim", number: "3" },
+    { id: uid(), name: "Morgan Diaz", number: "88" },
+    { id: uid(), name: "Avery Chen", number: "21" },
+  ],
+};
+
+// ============================================================
+// App
+// ============================================================
+// ============================================================
+// Global stylesheet — plain CSS, injected directly into the DOM.
+// This artifact environment only supports Tailwind's pre-defined
+// utility classes (no JIT compiler for arbitrary values like
+// bg-[#14171F]), so every custom color in this app is defined
+// here instead and applied via ordinary class names.
+// ============================================================
+const GLOBAL_STYLES = `
+  .bg-ink { background-color: #14171F; }
+  .text-ink { color: #14171F; }
+  .bg-panel { background-color: #1B1F2A; }
+  .bg-primary { background-color: #EDEFE7; }
+  .text-primary { color: #EDEFE7; }
+
+  .bg-gold { background-color: #E8B33D; }
+  .text-gold { color: #E8B33D; }
+  .border-gold { border-color: #E8B33D; }
+  .bg-gold-dim { background-color: #4A3F22; }
+  .border-gold-dim { border-color: #8A6E2E; }
+
+  .bg-green { background-color: #2F5233; }
+  .text-green { color: #2F5233; }
+  .bg-green-dim { background-color: #233D28; }
+
+  .bg-red { background-color: #C1432E; }
+  .text-red { color: #C1432E; }
+  .border-red { border-color: #C1432E; }
+  .bg-red-dim { background-color: #A83A28; }
+  .border-red-dim { border-color: #7A3225; }
+
+  .bg-blue { background-color: #4C7A9E; }
+  .text-blue { color: #4C7A9E; }
+  .bg-blue-dim { background-color: #37566E; }
+
+  .text-muted-1 { color: #D5D7DA; }
+  .text-muted-2 { color: #C3C6CB; }
+  .text-muted-3 { color: #A9ACB3; }
+  .text-muted-4 { color: #90939B; }
+  .text-muted-5 { color: #74777E; }
+
+  .bg-overlay-5 { background-color: rgba(255,255,255,0.05); }
+  .bg-overlay-25 { background-color: rgba(255,255,255,0.25); }
+  .bg-scrim-60 { background-color: rgba(0,0,0,0.6); }
+  .bg-scrim-70 { background-color: rgba(0,0,0,0.7); }
+  .border-soft-5 { border-color: rgba(255,255,255,0.05); }
+  .border-soft-10 { border-color: rgba(255,255,255,0.10); }
+  .border-soft-15 { border-color: rgba(255,255,255,0.15); }
+  .border-soft-20 { border-color: rgba(255,255,255,0.20); }
+  .border-soft-25 { border-color: rgba(255,255,255,0.25); }
+
+  .hover-border-soft:hover { border-color: rgba(255,255,255,0.25); }
+  .hover-text-red:hover { color: #C1432E; }
+  .hover-text-primary:hover { color: #EDEFE7; }
+  .focus-gold:focus { border-color: #E8B33D; outline: none; }
+  .active-dim-90:active { filter: brightness(0.9); }
+  .active-dim-95:active { filter: brightness(0.95); }
+  .disabled-dim-60:disabled { opacity: 0.6; }
+  .disabled-dim-30:disabled { opacity: 0.3; }
+
+  body, input, select, textarea, button { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+`;
+
+// ============================================================
+// Firestore data layer
+//   teams/{teamId}                  -> team doc (ownerUid, settings, roster[])
+//   teams/{teamId}/games/{gameId}   -> game doc (teamSettings snapshot, plays[])
+// Plays are the single source of truth (same engine as above), so
+// game docs are just written as a whole on every change — no
+// separate cached score fields to keep in sync.
+// ============================================================
+const teamsCol = () => db.collection("teams");
+const gamesCol = (teamId) => teamsCol().doc(teamId).collection("games");
+
+async function createTeam(uid, data) {
+  const ref = await teamsCol().add({ ...data, ownerUid: uid, createdAt: FieldValue.serverTimestamp() });
+  return ref.id;
+}
+async function updateTeam(teamId, data) {
+  await teamsCol().doc(teamId).update(data);
+}
+async function deleteTeamCascade(teamId) {
+  const gamesSnap = await gamesCol(teamId).get();
+  const batch = db.batch();
+  gamesSnap.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(teamsCol().doc(teamId));
+  await batch.commit();
+}
+async function createGame(teamId, game) {
+  const ref = await gamesCol(teamId).add(game);
+  return ref.id;
+}
+async function updateGame(teamId, gameId, data) {
+  await gamesCol(teamId).doc(gameId).update(data);
+}
+async function deleteGame(teamId, gameId) {
+  await gamesCol(teamId).doc(gameId).delete();
+}
+
+// ============================================================
+// App root — Firebase auth state drives everything else
+// ============================================================
+function FlagStatApp() {
+  const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = logged out
+  const [screen, setScreen] = useState("dashboard");
+  const [teams, setTeams] = useState([]);
+  const [activeTeam, setActiveTeam] = useState(null);
+  const [activeGame, setActiveGame] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => auth.onAuthStateChanged(setAuthUser), []);
+
+  useEffect(() => {
+    if (!authUser) { setTeams([]); return; }
+    const unsub = teamsCol().where("ownerUid", "==", authUser.uid).onSnapshot(
+      (snap) => setTeams(snap.docs.map((d) => ({ ...d.data(), id: d.id }))),
+      (err) => flash("Couldn't load teams: " + err.message)
+    );
+    return unsub;
+  }, [authUser]);
+
+  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2500); }
+
+  async function createDemoTeam() {
+    const id = await createTeam(authUser.uid, DEMO_TEAM);
+    flash("Demo team created — try starting a game.");
+  }
+
+  async function handleDeleteTeam(team) {
+    await deleteTeamCascade(team.id);
+    flash("Team deleted.");
+    setScreen("dashboard");
+  }
+
+  async function handleDeleteGame(teamId, game) {
+    await deleteGame(teamId, game.id);
+    flash("Game deleted.");
+    setScreen("dashboard");
+  }
+
+  if (authUser === undefined) {
+    return (
+      <>
+        <style>{GLOBAL_STYLES}</style>
+        <div className="min-h-screen bg-ink flex items-center justify-center"><Loader2 className="animate-spin text-gold" size={28} /></div>
+      </>
+    );
+  }
+  if (!authUser) {
+    return (
+      <>
+        <style>{GLOBAL_STYLES}</style>
+        <AuthScreen />
+      </>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-ink text-primary font-sans">
+      <style>{GLOBAL_STYLES}</style>
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gold text-ink px-4 py-2 rounded-md font-semibold text-sm shadow-lg text-center" style={{ maxWidth: "90vw" }}>
+          {toast}
+        </div>
+      )}
+
+      {screen === "dashboard" && (
+        <Dashboard
+          authUser={authUser}
+          teams={teams}
+          onLogout={() => auth.signOut()}
+          onNewTeam={() => { setActiveTeam(null); setScreen("teamForm"); }}
+          onEditTeam={(t) => { setActiveTeam(t); setScreen("teamForm"); }}
+          onDeleteTeam={handleDeleteTeam}
+          onOpenRoster={(t) => { setActiveTeam(t); setScreen("roster"); }}
+          onStartGame={(t) => { setActiveTeam(t); setScreen("gameSetup"); }}
+          onSeasonStats={(t) => { setActiveTeam(t); setScreen("seasonStats"); }}
+          onDemoTeam={createDemoTeam}
+          onOpenGame={(team, game) => { setActiveTeam(team); setActiveGame(game); setScreen(game.status === "final" ? "gameSummary" : "liveGame"); }}
+        />
+      )}
+
+      {screen === "seasonStats" && activeTeam && (
+        <SeasonStats team={activeTeam} onBack={() => setScreen("dashboard")} />
+      )}
+
+      {screen === "teamForm" && (
+        <TeamForm
+          team={activeTeam}
+          onCancel={() => setScreen("dashboard")}
+          onDelete={activeTeam ? () => handleDeleteTeam(activeTeam) : null}
+          onSave={async (team) => {
+            if (activeTeam) {
+              await updateTeam(activeTeam.id, team);
+              setActiveTeam({ ...activeTeam, ...team });
+            } else {
+              const id = await createTeam(authUser.uid, team);
+              setActiveTeam({ ...team, id, ownerUid: authUser.uid });
+            }
+            flash("Team saved.");
+            setScreen("roster");
+          }}
+        />
+      )}
+
+      {screen === "roster" && activeTeam && (
+        <RosterEditor
+          team={activeTeam}
+          onBack={() => setScreen("dashboard")}
+          onSave={async (roster) => {
+            await updateTeam(activeTeam.id, { roster });
+            setActiveTeam({ ...activeTeam, roster });
+          }}
+          onStartGame={() => setScreen("gameSetup")}
+        />
+      )}
+
+      {screen === "gameSetup" && activeTeam && (
+        <GameSetup
+          team={activeTeam}
+          onCancel={() => setScreen("dashboard")}
+          onStart={async (game) => {
+            const id = await createGame(activeTeam.id, game);
+            setActiveGame({ ...game, id });
+            setScreen("liveGame");
+          }}
+        />
+      )}
+
+      {screen === "liveGame" && activeGame && activeTeam && (
+        <LiveGame
+          game={activeGame}
+          onChange={async (g) => {
+            setActiveGame(g);
+            await updateGame(activeTeam.id, g.id, { plays: g.plays });
+          }}
+          onEnd={async (g) => {
+            const finalGame = { ...g, status: "final" };
+            setActiveGame(finalGame);
+            await updateGame(activeTeam.id, g.id, { status: "final" });
+            setScreen("gameSummary");
+          }}
+          onExit={() => setScreen("dashboard")}
+        />
+      )}
+
+      {screen === "gameSummary" && activeGame && activeTeam && (
+        <GameSummary
+          game={activeGame}
+          onBack={() => setScreen("dashboard")}
+          onChange={async (g) => {
+            setActiveGame(g);
+            await updateGame(activeTeam.id, g.id, { plays: g.plays });
+          }}
+          onDelete={() => handleDeleteGame(activeTeam.id, activeGame)}
+          onReopen={async (g) => {
+            const reopened = { ...g, status: "live" };
+            setActiveGame(reopened);
+            await updateGame(activeTeam.id, g.id, { status: "live" });
+            setScreen("liveGame");
+          }}
+          onEditMeta={async (g, meta) => {
+            const updated = { ...g, ...meta };
+            setActiveGame(updated);
+            await updateGame(activeTeam.id, g.id, meta);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Auth screen — real Firebase email/password auth
+// ============================================================
+function AuthScreen() {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      if (mode === "signup") await auth.createUserWithEmailAndPassword(email, password);
+      else await auth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="min-h-screen bg-ink text-primary flex items-center justify-center px-6 font-sans">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center gap-2 justify-center mb-1">
+          <Flag className="text-gold" size={26} />
+          <h1 className="text-2xl font-extrabold tracking-tight uppercase">FlagStat</h1>
+        </div>
+        <p className="text-center text-muted-5 text-sm mb-8 font-mono">coach-side play-by-play tracking</p>
+        <div className="bg-panel border border-soft-10 rounded-lg p-6">
+          <div className="flex mb-6 rounded-md overflow-hidden border border-soft-10 text-sm font-semibold">
+            <button className={`flex-1 py-2.5 ${mode === "login" ? "bg-gold text-ink" : "text-muted-2"}`} onClick={() => setMode("login")}>Log in</button>
+            <button className={`flex-1 py-2.5 ${mode === "signup" ? "bg-gold text-ink" : "text-muted-2"}`} onClick={() => setMode("signup")}>Sign up</button>
+          </div>
+          <form onSubmit={submit} className="space-y-4">
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className={inputCls} autoComplete="email" />
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password (6+ characters)" className={inputCls} autoComplete={mode === "login" ? "current-password" : "new-password"} />
+            {error && <p className="text-red text-xs">{error}</p>}
+            <button disabled={busy} className="w-full bg-gold text-ink font-bold py-3 rounded-md disabled-dim-60">
+              {busy ? "…" : mode === "login" ? "Log in" : "Create account"}
+            </button>
+          </form>
+        </div>
+        <p className="text-center text-xs text-muted-5 mt-4">
+          Real Firebase accounts — requires Email/Password sign-in enabled in your Firebase project.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Dashboard
+// ============================================================
+function Dashboard({ authUser, teams, onLogout, onNewTeam, onEditTeam, onDeleteTeam, onOpenRoster, onStartGame, onSeasonStats, onDemoTeam, onOpenGame }) {
+  const [confirmDeleteTeam, setConfirmDeleteTeam] = useState(null);
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <header className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <Flag className="text-gold" size={22} />
+          <span className="font-extrabold uppercase tracking-tight text-lg">FlagStat</span>
+        </div>
+        <button onClick={onLogout} className="text-muted-3 p-2 -mr-2"><LogOut size={18} /></button>
+      </header>
+      <p className="text-xs uppercase tracking-widest text-muted-5 font-mono mb-7">Coach view · {authUser.email}</p>
+
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm uppercase tracking-widest text-muted-3 font-semibold">Your teams</h2>
+        <button onClick={onNewTeam} className="flex items-center gap-1 text-sm font-semibold text-ink bg-primary rounded-md px-3 py-2">
+          <Plus size={14} /> New team
+        </button>
+      </div>
+
+      {teams.length === 0 && (
+        <div className="border border-dashed border-soft-15 rounded-lg p-8 text-center text-muted-3 mb-6">
+          <p className="mb-4">No teams yet. Create one to set your field size and start tracking games.</p>
+          <button onClick={onDemoTeam} className="inline-flex items-center gap-1.5 text-sm font-semibold text-gold border border-gold-dim rounded-full px-4 py-2">
+            <Sparkles size={14} /> Try a demo team
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {teams.map((t) => (
+          <TeamCard
+            key={t.id}
+            team={t}
+            onOpenRoster={onOpenRoster}
+            onSeasonStats={onSeasonStats}
+            onEditTeam={onEditTeam}
+            onStartGame={onStartGame}
+            onOpenGame={onOpenGame}
+            onRequestDelete={() => setConfirmDeleteTeam(t)}
+          />
+        ))}
+      </div>
+
+      {confirmDeleteTeam && (
+        <ConfirmDialog
+          title="Delete team?"
+          message={`This removes "${confirmDeleteTeam.name}", its roster, and its full game history. This can't be undone.`}
+          confirmLabel="Delete team"
+          danger
+          onCancel={() => setConfirmDeleteTeam(null)}
+          onConfirm={() => { onDeleteTeam(confirmDeleteTeam); setConfirmDeleteTeam(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TeamCard({ team, onOpenRoster, onSeasonStats, onEditTeam, onStartGame, onOpenGame, onRequestDelete }) {
+  const [games, setGames] = useState([]);
+  useEffect(() => {
+    const unsub = gamesCol(team.id).onSnapshot((snap) => setGames(snap.docs.map((d) => ({ ...d.data(), id: d.id }))));
+    return unsub;
+  }, [team.id]);
+
+  const rec = computeRecord(games);
+  const recentGames = [...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 4);
+
+  return (
+    <div className="bg-panel border border-soft-10 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h3 className="font-bold">{team.name}</h3>
+          <p className="text-xs text-muted-3 font-mono">{team.fieldLength} × {team.fieldWidth} yd field · {(team.roster || []).length} players</p>
+        </div>
+        <Shield className="text-blue shrink-0" size={20} />
+      </div>
+
+      <div className="flex items-center gap-4 bg-ink rounded-md px-3 py-2 mb-3 font-mono text-xs">
+        <span className="font-bold text-gold">{rec.w}-{rec.l}{rec.t ? `-${rec.t}` : ""}</span>
+        <span className="text-muted-4">{rec.played} played</span>
+        <span className="text-muted-4 ml-auto">{rec.pf} PF / {rec.pa} PA</span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 text-xs font-semibold mb-3">
+        <button onClick={() => onOpenRoster(team)} className="flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"><Users size={12} /> Roster</button>
+        <button onClick={() => onSeasonStats(team)} className="flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"><TrendingUp size={12} /> Season</button>
+        <button onClick={() => onEditTeam(team)} className="flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"><Settings size={12} /> Settings</button>
+        <button onClick={onRequestDelete} className="flex items-center justify-center gap-1 border border-red-dim text-red rounded-md px-2.5 py-2"><Trash2 size={12} /> Delete</button>
+        <button onClick={() => onStartGame(team)} className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1 bg-gold text-ink rounded-md px-2.5 py-2 sm:ml-auto"><Play size={12} /> Start game</button>
+      </div>
+
+      {recentGames.length > 0 && (
+        <div className="space-y-1.5 border-t border-soft-10 pt-3">
+          {recentGames.map((g) => (
+            <button key={g.id} onClick={() => onOpenGame(team, g)} className="w-full flex items-center justify-between text-xs bg-ink rounded-md px-3 py-2 text-left">
+              <span>vs {g.opponent} {g.status === "live" && <span className="text-red">· live</span>}</span>
+              <span className="font-mono text-muted-2">{g.date}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamForm({ team, onCancel, onSave, onDelete }) {
+  const [name, setName] = useState(team?.name || "");
+  const [fieldLength, setFieldLength] = useState(team?.fieldLength || 70);
+  const [fieldWidth, setFieldWidth] = useState(team?.fieldWidth || 30);
+  const [numDowns, setNumDowns] = useState(team?.numDowns || 4);
+  const [firstDownMode, setFirstDownMode] = useState(team?.firstDownMode || "midfield");
+  const [yardsPerFirstDown, setYardsPerFirstDown] = useState(team?.yardsPerFirstDown || 15);
+  const [touchdownPoints, setTouchdownPoints] = useState(team?.touchdownPoints ?? 6);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function submit(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave({
+      id: team?.id || uid(),
+      name: name.trim(),
+      fieldLength: Number(fieldLength),
+      fieldWidth: Number(fieldWidth),
+      numDowns: Number(numDowns),
+      firstDownMode,
+      yardsPerFirstDown: Number(yardsPerFirstDown),
+      touchdownPoints: Number(touchdownPoints),
+      roster: team?.roster || [],
+    });
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <BackHeader title={team ? "Edit team" : "New team"} onBack={onCancel} />
+      <form onSubmit={submit} className="space-y-6">
+        <Field label="Team name"><input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} placeholder="e.g. Sunday Ballers" /></Field>
+
+        <Field label="Field length (goal to goal, yards)">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {FIELD_LENGTHS.map((l) => <Chip key={l} active={Number(fieldLength) === l} onClick={() => setFieldLength(l)}>{l}</Chip>)}
+          </div>
+          <input value={fieldLength} onChange={(e) => setFieldLength(e.target.value)} type="number" className={inputCls} placeholder="Custom length" />
+        </Field>
+
+        <Field label="Field width (yards)">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {FIELD_WIDTHS.map((w) => <Chip key={w} active={Number(fieldWidth) === w} onClick={() => setFieldWidth(w)}>{w}</Chip>)}
+          </div>
+          <input value={fieldWidth} onChange={(e) => setFieldWidth(e.target.value)} type="number" className={inputCls} placeholder="Custom width" />
+        </Field>
+
+        <Field label="Downs per possession">
+          <div className="grid grid-cols-3 gap-2">
+            {[3, 4, 5].map((n) => <Chip key={n} active={Number(numDowns) === n} onClick={() => setNumDowns(n)}>{n}</Chip>)}
+          </div>
+        </Field>
+
+        <Field label="First-down rule">
+          <div className="grid grid-cols-2 gap-2">
+            <Chip active={firstDownMode === "midfield"} onClick={() => setFirstDownMode("midfield")}>Cross midfield</Chip>
+            <Chip active={firstDownMode === "everyN"} onClick={() => setFirstDownMode("everyN")}>Every N yards</Chip>
+          </div>
+          {firstDownMode === "everyN" && (
+            <input value={yardsPerFirstDown} onChange={(e) => setYardsPerFirstDown(e.target.value)} type="number" className={`${inputCls} mt-2`} placeholder="Yards needed for a first down" />
+          )}
+        </Field>
+
+        <Field label="Points per touchdown"><input value={touchdownPoints} onChange={(e) => setTouchdownPoints(e.target.value)} type="number" className={inputCls} /></Field>
+
+        <button className="w-full bg-gold text-ink font-bold py-3.5 rounded-md">Save team</button>
+
+        {onDelete && (
+          <button type="button" onClick={() => setConfirmDelete(true)} className="w-full flex items-center justify-center gap-1.5 border border-red-dim text-red font-semibold py-3 rounded-md">
+            <Trash2 size={14} /> Delete this team
+          </button>
+        )}
+      </form>
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete team?"
+          message={`This removes "${team.name}", its roster, and its game history. This can't be undone.`}
+          confirmLabel="Delete team"
+          danger
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={onDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Roster editor — add, rename, renumber, remove
+// ============================================================
+function RosterEditor({ team, onBack, onSave, onStartGame }) {
+  const [roster, setRoster] = useState(team.roster || []);
+  const [name, setName] = useState("");
+  const [number, setNumber] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editNumber, setEditNumber] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(null);
+
+  function addPlayer(e) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const next = [...roster, { id: uid(), name: name.trim(), number: number.trim() }];
+    setRoster(next); onSave(next);
+    setName(""); setNumber("");
+  }
+  function startEdit(p) { setEditingId(p.id); setEditName(p.name); setEditNumber(p.number); }
+  function saveEdit(id) {
+    const next = roster.map((p) => (p.id === id ? { ...p, name: editName.trim() || p.name, number: editNumber.trim() } : p));
+    setRoster(next); onSave(next);
+    setEditingId(null);
+  }
+  function removePlayer(id) {
+    const next = roster.filter((p) => p.id !== id);
+    setRoster(next); onSave(next);
+    setConfirmRemove(null);
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <BackHeader title={`${team.name} · Roster`} onBack={onBack} />
+      <form onSubmit={addPlayer} className="flex gap-2 mb-6">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Player name" className={`${inputCls} flex-1`} />
+        <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="#" className={`${inputCls} w-16`} />
+        <button className="bg-primary text-ink rounded-md px-4 font-bold"><Plus size={16} /></button>
+      </form>
+
+      <div className="space-y-2 mb-8">
+        {roster.length === 0 && <p className="text-muted-4 text-sm">No players added yet.</p>}
+        {roster.map((p) => (
+          <div key={p.id} className="bg-panel border border-soft-10 rounded-md px-3 py-2">
+            {editingId === p.id ? (
+              <div className="flex items-center gap-2">
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} className={`${inputCls} flex-1 py-1.5`} />
+                <input value={editNumber} onChange={(e) => setEditNumber(e.target.value)} className={`${inputCls} w-14 py-1.5`} />
+                <button onClick={() => saveEdit(p.id)} className="text-green bg-green-dim rounded p-1.5"><Check size={16} /></button>
+                <button onClick={() => setEditingId(null)} className="text-muted-3 p-1.5"><X size={16} /></button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-sm text-muted-2 w-8">{p.number || "–"}</span>
+                <span className="flex-1 font-medium">{p.name}</span>
+                <button onClick={() => startEdit(p)} className="text-blue p-1.5"><Pencil size={15} /></button>
+                <button onClick={() => setConfirmRemove(p)} className="text-red p-1.5"><Trash2 size={15} /></button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button onClick={onStartGame} className="w-full bg-gold text-ink font-bold py-3.5 rounded-md flex items-center justify-center gap-2">
+        <Play size={16} /> Start a game
+      </button>
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove player?"
+          message={`Remove ${confirmRemove.name} from the roster? Past game stats already logged for them are kept.`}
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setConfirmRemove(null)}
+          onConfirm={() => removePlayer(confirmRemove.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Game setup
+// ============================================================
+function GameSetup({ team, onCancel, onStart }) {
+  const [opponent, setOpponent] = useState("");
+  const [possession, setPossession] = useState("us");
+  const [presentIds, setPresentIds] = useState(team.roster.map((p) => p.id));
+
+  function togglePresent(id) {
+    setPresentIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+  function start() {
+    if (!opponent.trim()) return;
+    onStart({
+      id: uid(),
+      teamId: team.id,
+      teamSettings: team,
+      opponent: opponent.trim(),
+      date: new Date().toISOString().slice(0, 10),
+      status: "live",
+      presentIds,
+      initialPossession: possession,
+      plays: [],
+    });
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <BackHeader title="New game" onBack={onCancel} />
+      <Field label="Opponent"><input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} placeholder="Opponent team name" /></Field>
+      <Field label="Who receives first?">
+        <div className="grid grid-cols-2 gap-2">
+          <Chip active={possession === "us"} onClick={() => setPossession("us")}>{team.name}</Chip>
+          <Chip active={possession === "them"} onClick={() => setPossession("them")}>Opponent</Chip>
+        </div>
+      </Field>
+      <Field label="Players present today">
+        <div className="grid grid-cols-2 gap-2">
+          {team.roster.map((p) => <Chip key={p.id} active={presentIds.includes(p.id)} onClick={() => togglePresent(p.id)}>{p.number ? `#${p.number} ` : ""}{p.name}</Chip>)}
+        </div>
+        {team.roster.length === 0 && <p className="text-muted-4 text-sm">Add players to the roster first — you can still start without them.</p>}
+      </Field>
+      <button onClick={start} className="w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-4">Kickoff</button>
+    </div>
+  );
+}
+
+// ============================================================
+// Live game
+// ============================================================
+function LiveGame({ game, onChange, onEnd, onExit }) {
+  const [draft, setDraft] = useState(null);
+  const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
+  const [showFullLog, setShowFullLog] = useState(false);
+  const settings = game.teamSettings;
+  const roster = settings.roster.filter((p) => game.presentIds?.includes(p.id));
+  const derived = useMemo(() => computeState(game), [game]);
+
+  function addPlay(play) {
+    const entry = { id: uid(), quarter: derived.quarter, timestamp: Date.now(), ...play };
+    onChange({ ...game, plays: [...game.plays, entry] });
+  }
+  function removePlay(playId) {
+    onChange({ ...game, plays: game.plays.filter((p) => p.id !== playId) });
+    setConfirmDeletePlay(null);
+  }
+  function undoLast() {
+    if (game.plays.length === 0) return;
+    onChange({ ...game, plays: game.plays.slice(0, -1) });
+  }
+
+  function handleInstant(type) { addPlay({ type }); }
+
+  function handleConfirm(payload) {
+    const { type } = draft;
+    let entry = { type, playerId: payload.playerId || null };
+    if (type === "sack") entry.yards = -Math.abs(Number(payload.yards) || 0);
+    else if (["run", "pass_complete", "interception", "fumble"].includes(type)) entry.yards = Number(payload.yards) || 0;
+    else if (type === "penalty") { entry.yards = Math.abs(Number(payload.yards) || 0); entry.on = payload.on; }
+    addPlay(entry);
+    setDraft(null);
+  }
+  function handlePAT(success, isTwoPoint) {
+    addPlay({ type: isTwoPoint ? "pat2" : "pat1", result: success ? "good" : "no_good" });
+  }
+
+  const visiblePlays = [...game.plays].reverse();
+  const shownPlays = showFullLog ? visiblePlays : visiblePlays.slice(0, 10);
+
+  const scoreboard = (
+    <div className="sticky top-0 z-20 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-2 pb-3 bg-ink">
+      <div className="bg-panel border border-soft-10 rounded-lg p-4">
+        <div className="flex justify-between items-center mb-3">
+          <div className="text-center flex-1"><p className="text-xs uppercase tracking-widest text-muted-3 truncate">{settings.name}</p><p className="font-mono text-3xl font-bold">{derived.score.us}</p></div>
+          <div className="text-muted-5 font-mono text-xs px-2">Q{derived.quarter}</div>
+          <div className="text-center flex-1"><p className="text-xs uppercase tracking-widest text-muted-3 truncate">{game.opponent}</p><p className="font-mono text-3xl font-bold">{derived.score.them}</p></div>
+        </div>
+        <div className="flex items-center justify-between font-mono text-xs text-muted-2 border-t border-soft-10 pt-3">
+          <span className="flex items-center gap-1"><CircleDot size={11} className={derived.possession === "us" ? "text-gold" : "text-blue"} /> {derived.possession === "us" ? settings.name : game.opponent} ball</span>
+          <span>Down {derived.down}/{settings.numDowns}</span>
+          <span>{derived.ballOn} yd line</span>
+        </div>
+        <FieldVisual length={settings.fieldLength} ballOn={derived.ballOn} possession={derived.possession} setStartYard={derived.setStartYard} firstDownMode={settings.firstDownMode} />
+      </div>
+    </div>
+  );
+
+  if (derived.pendingPAT) {
+    return (
+      <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16">
+        <div className="pt-6"><BackHeader title="Extra point" onBack={onExit} /></div>
+        {scoreboard}
+        <div className="bg-panel border border-soft-10 rounded-lg p-6 text-center mt-4">
+          <p className="mb-4 font-semibold">Touchdown! Choose the try for {derived.pendingPAT === "us" ? settings.name : game.opponent}:</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => handlePAT(true, false)} className="bg-green rounded-md py-4 font-semibold">1pt Good</button>
+            <button onClick={() => handlePAT(false, false)} className="bg-red-dim rounded-md py-4 font-semibold">1pt No Good</button>
+            <button onClick={() => handlePAT(true, true)} className="bg-green rounded-md py-4 font-semibold">2pt Good</button>
+            <button onClick={() => handlePAT(false, true)} className="bg-red-dim rounded-md py-4 font-semibold">2pt No Good</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 sm:px-5 pb-24">
+      <div className="pt-6"><BackHeader title={`${settings.name} vs ${game.opponent}`} onBack={onExit} /></div>
+      {scoreboard}
+
+      <div className="grid grid-cols-3 gap-2 mb-4 mt-4">
+        <button onClick={() => handleInstant("possession_change")} className="flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5">
+          <ArrowLeftRight size={14} /> Change ball
+        </button>
+        <button onClick={() => handleInstant("quarter_end")} className="flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5">
+          <SkipForward size={14} /> End quarter
+        </button>
+        <button onClick={undoLast} disabled={game.plays.length === 0} className="flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5 disabled-dim-30">
+          <RotateCcw size={14} /> Undo last
+        </button>
+      </div>
+
+      <p className="text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold">Log a play</p>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        {PLAY_TYPES.map((pt) => (
+          <button
+            key={pt.id}
+            onClick={() => (pt.modal ? setDraft({ type: pt.id }) : handleInstant(pt.id))}
+            className={`${pt.color} rounded-md py-3.5 font-bold text-sm shadow active-dim-90`}
+          >
+            {pt.label}
+          </button>
+        ))}
+      </div>
+
+      <button onClick={() => onEnd(game)} className="w-full border border-red text-red font-bold py-3.5 rounded-md mb-3">End game</button>
+
+      <div className="flex items-center justify-between mt-6 mb-2">
+        <p className="text-xs uppercase tracking-widest text-muted-4 font-semibold">Play-by-play ({game.plays.length})</p>
+        {game.plays.length > 10 && (
+          <button onClick={() => setShowFullLog((v) => !v)} className="text-xs text-blue font-semibold">{showFullLog ? "Show recent" : "Show all"}</button>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {shownPlays.map((p) => (
+          <PlayLogRow key={p.id} play={p} roster={settings.roster} team={settings} opponent={game.opponent} onDelete={() => setConfirmDeletePlay(p)} />
+        ))}
+        {game.plays.length === 0 && <p className="text-muted-4 text-sm">No plays logged yet.</p>}
+      </div>
+
+      {draft && <PlayFormModal draft={draft} roster={roster} onCancel={() => setDraft(null)} onConfirm={handleConfirm} />}
+
+      {confirmDeletePlay && (
+        <ConfirmDialog
+          title="Remove this play?"
+          message="Everything after it in the log will be recalculated automatically."
+          confirmLabel="Remove play"
+          danger
+          onCancel={() => setConfirmDeletePlay(null)}
+          onConfirm={() => removePlay(confirmDeletePlay.id)}
+        />
+      )}
+    </div>
+  );
+}
+
+function FieldVisual({ length, ballOn, possession, setStartYard, firstDownMode }) {
+  const pct = clamp((ballOn / length) * 100, 0, 100);
+  const showMarker = firstDownMode === "everyN";
+  return (
+    <div className="mt-3">
+      <div className="relative h-4 rounded-sm overflow-hidden border border-soft-20 bg-green">
+        <div className="absolute inset-y-0 left-0 bg-gold-dim border-r border-soft-20" style={{ width: "6%" }} />
+        <div className="absolute inset-y-0 right-0 bg-blue-dim border-l border-soft-20" style={{ width: "6%" }} />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-overlay-25" />
+        <div className="absolute top-0 bottom-0 w-1.5 bg-gold" style={{ left: `calc(${pct}% - 3px)` }} />
+      </div>
+      <div className="flex justify-between text-xs font-mono text-muted-4 mt-1">
+        <span>{possession === "us" ? "your goal" : "their goal"}</span>
+        <span>midfield</span>
+        <span>{possession === "us" ? "their goal" : "your goal"}</span>
+      </div>
+    </div>
+  );
+}
+
+function PlayLogRow({ play, roster, team, opponent, onDelete }) {
+  const player = roster.find((p) => p.id === play.playerId);
+  const teamName = play.possession === "us" || (!play.possession && ["quarter_end"].includes(play.type)) ? team.name : (play.possession === "them" ? opponent : null);
+  const label = PLAY_LABELS[play.type] || play.type;
+  return (
+    <div className="flex items-center justify-between text-xs bg-panel border border-soft-5 rounded-md px-3 py-2.5">
+      <span className="text-muted-4 font-mono w-8 shrink-0">Q{play.quarter || 1}</span>
+      <span className="flex-1">
+        {label}
+        {play.playerId && player ? ` · ${player.name}` : ""}
+        {typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd` : ""}
+        {play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : ""}
+      </span>
+      {play.type === "touchdown" && <Award size={13} className="text-gold shrink-0 mr-2" />}
+      {onDelete && <button onClick={onDelete} className="text-muted-5 hover-text-red p-1 shrink-0"><X size={14} /></button>}
+    </div>
+  );
+}
+
+function PlayFormModal({ draft, roster, onCancel, onConfirm }) {
+  const [yards, setYards] = useState("");
+  const [playerId, setPlayerId] = useState("");
+  const [on, setOn] = useState("them");
+  const meta = PLAY_TYPES.find((t) => t.id === draft.type);
+
+  return (
+    <div className="fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4">
+      <div className="bg-panel border-t sm:border border-soft-10 rounded-t-2xl sm:rounded-lg w-full max-w-sm p-5 pb-8 sm:pb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-lg">{meta.label}</h3>
+          <button onClick={onCancel} className="p-1"><X size={18} className="text-muted-3" /></button>
+        </div>
+
+        {meta.needsOn && (
+          <Field label="Penalty on">
+            <div className="grid grid-cols-2 gap-2">
+              <Chip active={on === "them"} onClick={() => setOn("them")}>Opponent</Chip>
+              <Chip active={on === "us"} onClick={() => setOn("us")}>Us</Chip>
+            </div>
+          </Field>
+        )}
+
+        {meta.needsYards && (
+          <Field label={meta.yardsLabel}>
+            <input autoFocus type="number" inputMode="numeric" value={yards} onChange={(e) => setYards(e.target.value)} className={inputCls} placeholder="0" />
+          </Field>
+        )}
+
+        {meta.needsPlayer && roster.length > 0 && (
+          <Field label="Player">
+            <select value={playerId} onChange={(e) => setPlayerId(e.target.value)} className={inputCls}>
+              <option value="">— none —</option>
+              {roster.map((p) => <option key={p.id} value={p.id}>{p.number ? `#${p.number} ` : ""}{p.name}</option>)}
+            </select>
+          </Field>
+        )}
+
+        <button onClick={() => onConfirm({ yards, playerId, on })} className="w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-2 flex items-center justify-center gap-2">
+          <Check size={16} /> Log play
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Game summary
+// ============================================================
+function GameSummary({ game, onBack, onChange, onDelete, onReopen, onEditMeta }) {
+  const settings = game.teamSettings;
+  const derived = useMemo(() => computeState(game), [game]);
+  const stats = useMemo(() => computePlayerStats(game.plays), [game.plays]);
+  const rosterById = Object.fromEntries((settings.roster || []).map((p) => [p.id, p]));
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [opponent, setOpponent] = useState(game.opponent);
+  const [date, setDate] = useState(game.date);
+
+  function removePlay(playId) {
+    onChange({ ...game, plays: game.plays.filter((p) => p.id !== playId) });
+    setConfirmDeletePlay(null);
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <BackHeader title="Final" onBack={onBack} />
+
+      <div className="bg-panel border border-soft-10 rounded-lg p-6 text-center mb-4">
+        <p className="text-xs uppercase tracking-widest text-muted-4 mb-2">Final score</p>
+        <p className="font-mono text-4xl font-bold mb-1">{derived.score.us} – {derived.score.them}</p>
+        {editingMeta ? (
+          <div className="mt-4 space-y-2 text-left">
+            <input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} placeholder="Opponent" />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+            <div className="flex gap-2">
+              <button onClick={() => { onEditMeta(game, { opponent, date }); setEditingMeta(false); }} className="flex-1 bg-gold text-ink font-bold py-2 rounded-md">Save</button>
+              <button onClick={() => setEditingMeta(false)} className="flex-1 border border-soft-15 rounded-md py-2">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setEditingMeta(true)} className="text-sm text-muted-3 flex items-center gap-1 mx-auto mt-1">
+            vs {game.opponent} · {game.date} <Pencil size={11} />
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => onReopen(game)} className="flex-1 flex items-center justify-center gap-1.5 border border-soft-15 text-xs font-semibold rounded-md py-2.5">
+          <RefreshCcw size={13} /> Reopen game
+        </button>
+        <button onClick={() => setConfirmDelete(true)} className="flex-1 flex items-center justify-center gap-1.5 border border-red-dim text-red text-xs font-semibold rounded-md py-2.5">
+          <Trash2 size={13} /> Delete game
+        </button>
+      </div>
+
+      {Object.keys(stats).length > 0 && (
+        <>
+          <p className="text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold">Player stats</p>
+          <div className="bg-panel border border-soft-10 rounded-lg overflow-hidden mb-6 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-overlay-5 text-muted-3 text-xs uppercase">
+                <tr><th className="text-left px-3 py-2">Player</th><th className="text-right px-3 py-2">Touches</th><th className="text-right px-3 py-2">Yards</th><th className="text-right px-3 py-2">TDs</th><th className="text-right px-3 py-2">TOs</th></tr>
+              </thead>
+              <tbody>
+                {Object.entries(stats).map(([pid, s]) => (
+                  <tr key={pid} className="border-t border-soft-5">
+                    <td className="px-3 py-2 font-medium">{rosterById[pid]?.name || "Unknown"}</td>
+                    <td className="px-3 py-2 text-right font-mono">{s.touches}</td>
+                    <td className="px-3 py-2 text-right font-mono">{s.yards}</td>
+                    <td className="px-3 py-2 text-right font-mono">{s.tds}</td>
+                    <td className="px-3 py-2 text-right font-mono">{s.turnovers}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <p className="text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold">Full play-by-play</p>
+      <p className="text-xs text-muted-5 mb-2">Spot a mistake? Remove a play below — the score and stats recalculate automatically.</p>
+      <div className="space-y-1.5">
+        {game.plays.map((p) => (
+          <PlayLogRow key={p.id} play={p} roster={settings.roster} team={settings} opponent={game.opponent} onDelete={() => setConfirmDeletePlay(p)} />
+        ))}
+        {game.plays.length === 0 && <p className="text-muted-4 text-sm">No plays were logged.</p>}
+      </div>
+
+      {confirmDelete && (
+        <ConfirmDialog title="Delete this game?" message="This removes the game and its full play log. This can't be undone." confirmLabel="Delete game" danger onCancel={() => setConfirmDelete(false)} onConfirm={onDelete} />
+      )}
+      {confirmDeletePlay && (
+        <ConfirmDialog title="Remove this play?" message="Score and stats will be recalculated." confirmLabel="Remove play" danger onCancel={() => setConfirmDeletePlay(null)} onConfirm={() => removePlay(confirmDeletePlay.id)} />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Season stats
+// ============================================================
+
+// ============================================================
+// Season stats — games already come with plays embedded via
+// Firestore, so no lazy per-game loading is needed here.
+// ============================================================
+function SeasonStats({ team, onBack }) {
+  const [loading, setLoading] = useState(true);
+  const [games, setGames] = useState([]);
+
+  useEffect(() => {
+    const unsub = gamesCol(team.id).onSnapshot((snap) => {
+      setGames(snap.docs.map((d) => ({ ...d.data(), id: d.id })));
+      setLoading(false);
+    });
+    return unsub;
+  }, [team.id]);
+
+  const record = useMemo(() => computeRecord(games), [games]);
+  const rosterById = Object.fromEntries((team.roster || []).map((p) => [p.id, p]));
+
+  const playerTotals = useMemo(() => {
+    const totals = {};
+    for (const g of games) {
+      if (g.status !== "final") continue;
+      const gameTotals = computePlayerStats(g.plays || []);
+      for (const [pid, s] of Object.entries(gameTotals)) {
+        totals[pid] = totals[pid] || { yards: 0, tds: 0, touches: 0, turnovers: 0, games: new Set() };
+        totals[pid].yards += s.yards;
+        totals[pid].tds += s.tds;
+        totals[pid].touches += s.touches;
+        totals[pid].turnovers += s.turnovers;
+        totals[pid].games.add(g.id);
+      }
+    }
+    return totals;
+  }, [games]);
+
+  const sortedIds = Object.keys(playerTotals).sort((a, b) => playerTotals[b].yards - playerTotals[a].yards);
+
+  function exportCSV() {
+    const rows = [["Player", "Games Played", "Touches", "Yards", "Yards/Touch", "TDs", "Turnovers"]];
+    sortedIds.forEach((pid) => {
+      const s = playerTotals[pid];
+      rows.push([rosterById[pid]?.name || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
+    });
+    rows.push([]);
+    rows.push(["Date", "Opponent", "Result", "Score"]);
+    [...games].sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach((g) => {
+      const s = computeState(g).score;
+      const win = g.status === "final" ? (s.us > s.them ? "W" : s.us < s.them ? "L" : "T") : "—";
+      rows.push([g.date, g.opponent, win, g.status === "final" ? `${s.us}-${s.them}` : "live"]);
+    });
+    downloadCSV(`${team.name.replace(/\s+/g, "_")}_season_stats.csv`, rows);
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 sm:px-5 pb-16 pt-6">
+      <BackHeader title={`${team.name} · Season`} onBack={onBack} />
+
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        <StatBlock label="Record" value={`${record.w}-${record.l}${record.t ? `-${record.t}` : ""}`} />
+        <StatBlock label="Points for" value={record.pf} />
+        <StatBlock label="Points against" value={record.pa} />
+      </div>
+
+      {sortedIds.length > 0 && (
+        <button onClick={exportCSV} className="w-full flex items-center justify-center gap-1.5 border border-soft-15 text-sm font-semibold rounded-md py-2.5 mb-6">
+          <Download size={14} /> Export season CSV
+        </button>
+      )}
+
+      {loading && <p className="text-muted-4 text-sm mb-6">Loading season…</p>}
+
+      {!loading && sortedIds.length > 0 && (
+        <>
+          <p className="text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold">Season stat leaders</p>
+          <div className="bg-panel border border-soft-10 rounded-lg overflow-hidden mb-8 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-overlay-5 text-muted-3 text-xs uppercase">
+                <tr><th className="text-left px-3 py-2">Player</th><th className="text-right px-3 py-2">GP</th><th className="text-right px-3 py-2">Touches</th><th className="text-right px-3 py-2">Yards</th><th className="text-right px-3 py-2">YPT</th><th className="text-right px-3 py-2">TDs</th><th className="text-right px-3 py-2">TOs</th></tr>
+              </thead>
+              <tbody>
+                {sortedIds.map((pid) => {
+                  const s = playerTotals[pid];
+                  const ypt = s.touches ? (s.yards / s.touches).toFixed(1) : "0.0";
+                  return (
+                    <tr key={pid} className="border-t border-soft-5">
+                      <td className="px-3 py-2 font-medium">{rosterById[pid]?.name || "Unknown"}</td>
+                      <td className="px-3 py-2 text-right font-mono">{s.games.size}</td>
+                      <td className="px-3 py-2 text-right font-mono">{s.touches}</td>
+                      <td className="px-3 py-2 text-right font-mono">{s.yards}</td>
+                      <td className="px-3 py-2 text-right font-mono">{ypt}</td>
+                      <td className="px-3 py-2 text-right font-mono">{s.tds}</td>
+                      <td className="px-3 py-2 text-right font-mono">{s.turnovers}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {!loading && sortedIds.length === 0 && <p className="text-muted-4 text-sm mb-8">No completed games with logged plays yet this season.</p>}
+
+      <p className="text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold">Season schedule</p>
+      <div className="space-y-2">
+        {[...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).map((g) => {
+          const s = computeState(g).score;
+          const win = g.status === "final" ? (s.us > s.them ? "W" : s.us < s.them ? "L" : "T") : null;
+          return (
+            <div key={g.id} className="flex items-center justify-between bg-panel border border-soft-10 rounded-lg px-4 py-2.5">
+              <div><p className="font-semibold text-sm">vs {g.opponent}</p><p className="text-xs text-muted-4">{g.date}</p></div>
+              <div className="flex items-center gap-2 font-mono text-sm">
+                {win && <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${win === "W" ? "bg-green" : win === "L" ? "bg-red" : "bg-blue"}`}>{win}</span>}
+                <span>{g.status === "final" ? `${s.us}–${s.them}` : "live"}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatBlock({ label, value }) {
+  return (
+    <div className="bg-panel border border-soft-10 rounded-lg p-3 text-center">
+      <p className="text-xs uppercase tracking-widest text-muted-4 mb-1">{label}</p>
+      <p className="font-mono text-xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// shared bits
+// ============================================================
+function BackHeader({ title, onBack }) {
+  return (
+    <div className="flex items-center gap-2 mb-6">
+      <button onClick={onBack} className="text-muted-3 hover-text-primary p-1 -ml-1"><ChevronLeft size={22} /></button>
+      <h1 className="font-extrabold text-lg tracking-tight">{title}</h1>
+    </div>
+  );
+}
+function Field({ label, children }) {
+  return <div className="mb-0"><p className="text-xs uppercase tracking-wide text-muted-3 mb-1.5 font-semibold">{label}</p>{children}</div>;
+}
+function Chip({ active, onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} className={`rounded-md py-2.5 text-sm font-semibold border ${active ? "bg-gold text-ink border-gold" : "border-soft-15 text-muted-1"}`}>
+      {children}
+    </button>
+  );
+}
+function ConfirmDialog({ title, message, confirmLabel, danger, onConfirm, onCancel }) {
+  return (
+    <div className="fixed inset-0 bg-scrim-70 flex items-end sm:items-center justify-center z-50 px-0 sm:px-4">
+      <div className="bg-panel border-t sm:border border-soft-10 rounded-t-2xl sm:rounded-lg w-full max-w-sm p-5 pb-8 sm:pb-5">
+        <div className="flex items-start gap-3 mb-4">
+          <AlertTriangle size={20} className="text-red shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-bold mb-1">{title}</h3>
+            <p className="text-sm text-muted-2">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 border border-soft-15 rounded-md py-3 font-semibold">Cancel</button>
+          <button onClick={onConfirm} className={`flex-1 rounded-md py-3 font-bold ${danger ? "bg-red text-white" : "bg-gold text-ink"}`}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<FlagStatApp />);
+
+</script>
+</body>
+</html>
