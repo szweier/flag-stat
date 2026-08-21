@@ -13,18 +13,14 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2236%22%20fill%3D%22%2314171F%22/%3E%3Ctext%20x%3D%2290%22%20y%3D%22122%22%20font-size%3D%2296%22%20text-anchor%3D%22middle%22%3E%F0%9F%9A%A9%3C/text%3E%3C/svg%3E" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20rx%3D%2236%22%20fill%3D%22%2314171F%22/%3E%3Ctext%20x%3D%2290%22%20y%3D%22122%22%20font-size%3D%2296%22%20text-anchor%3D%22middle%22%3E%F0%9F%9A%A9%3C/text%3E%3C/svg%3E" />
 
-<!-- Force the browser to understand modules and find Fragment -->
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh",
-    "react-dom": "https://esm.sh"
-  }
-}
-</script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-<!-- The fully complete Babel compiler URL (fixes the MIME/unpkg error) -->
-<script src="https://unpkg.com"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
 <style>
   html, body { background:#14171F; color:#F5F4EF; overscroll-behavior-y: none; }
