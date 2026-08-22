@@ -113,7 +113,8 @@ const PLAY_TYPES = [{
   needsPlayer: true,
   playerLabel: "Ball carrier",
   yardsLabel: "Yards",
-  signable: true
+  signable: true,
+  fumbleToggle: "Fumbled after the run?"
 }, {
   id: "pass_complete",
   label: "Pass Complete",
@@ -124,7 +125,8 @@ const PLAY_TYPES = [{
   playerLabel: "Receiver",
   needsPasser: true,
   yardsLabel: "Yards",
-  signable: true
+  signable: true,
+  fumbleToggle: "Fumbled after the catch?"
 }, {
   id: "pass_incomplete",
   label: "Pass Incomplete",
@@ -141,17 +143,22 @@ const PLAY_TYPES = [{
   needsYards: true,
   needsPlayer: false,
   needsPasser: true,
-  yardsLabel: "Yards lost"
+  yardsLabel: "Yards lost",
+  fumbleToggle: "Fumbled on the sack?"
 }, {
   id: "interception",
   label: "Interception",
   color: "bg-red",
   modal: true,
   needsYards: true,
-  needsPlayer: false,
+  needsAirYards: true,
+  airYardsLabel: "Pass distance to the pick",
+  needsPlayer: true,
+  playerLabel: "Returner (if you intercepted it)",
   needsPasser: true,
   passerLabel: "Passer (if you threw it)",
-  yardsLabel: "Return yards"
+  yardsLabel: "Return yards (from the pick)",
+  fumbleToggle: "Fumbled during the return?"
 }, {
   id: "fumble",
   label: "Fumble Lost",
@@ -159,17 +166,8 @@ const PLAY_TYPES = [{
   modal: true,
   needsYards: true,
   needsPlayer: true,
-  playerLabel: "Player",
+  playerLabel: "Player (who lost it or recovered it)",
   yardsLabel: "Return yards"
-}, {
-  id: "touchdown",
-  label: "Touchdown",
-  color: "bg-gold text-ink",
-  modal: true,
-  needsYards: false,
-  needsPlayer: true,
-  playerLabel: "Who scored",
-  needsScoringType: true
 }, {
   id: "penalty",
   label: "Penalty",
@@ -190,23 +188,8 @@ const PLAY_TYPES = [{
   color: "bg-red",
   modal: false
 }];
-const SCORING_PLAY_TYPES = [{
-  id: "run",
-  label: "Run"
-}, {
-  id: "pass",
-  label: "Pass"
-}, {
-  id: "interception_return",
-  label: "INT return"
-}, {
-  id: "fumble_return",
-  label: "Fumble return"
-}, {
-  id: "other",
-  label: "Other"
-}];
 const PLAY_LABELS = Object.fromEntries(PLAY_TYPES.map(p => [p.id, p.label]));
+PLAY_LABELS.touchdown = "Touchdown";
 PLAY_LABELS.pat1 = "PAT (1pt)";
 PLAY_LABELS.pat2 = "PAT (2pt)";
 PLAY_LABELS.quarter_end = "End of quarter";
@@ -291,6 +274,9 @@ function applyPlayToState(state, play, settings) {
     };
   }
   if (play.type === "touchdown") {
+    // Kept for backward compatibility with games logged before this play
+    // type was retired — old scores must still replay correctly. Not
+    // offered in the UI anymore; touchdowns are now detected automatically.
     return {
       ...state,
       score: {
@@ -309,13 +295,59 @@ function applyPlayToState(state, play, settings) {
       setStartYard: ballOn
     };
   }
-  if (play.type === "interception" || play.type === "fumble") {
+  if (play.type === "interception") {
+    // The pass travels first (air yards, from the line of scrimmage to the
+    // spot of the pick), then the return happens from that spot — these are
+    // two separate distances, not one blended number.
+    const airYards = Number(play.airYards) || 0;
     const ret = Number(play.yards) || 0;
-    const newBallOn = clamp(possession === "us" ? ballOn - ret : ballOn + ret, 0, settings.fieldLength);
+    const pickSpot = clamp(possession === "us" ? ballOn + airYards : ballOn - airYards, 0, settings.fieldLength);
+    const newPossessor = possession === "us" ? "them" : "us";
+    const newBallOn = clamp(newPossessor === "us" ? pickSpot + ret : pickSpot - ret, 0, settings.fieldLength);
+    const reachedGoal = newPossessor === "us" ? newBallOn >= settings.fieldLength : newBallOn <= 0;
+    if (reachedGoal) {
+      return {
+        ...state,
+        score: {
+          ...score,
+          [newPossessor]: (score[newPossessor] || 0) + settings.touchdownPoints
+        },
+        ballOn: newPossessor === "us" ? settings.fieldLength : 0,
+        possession: newPossessor,
+        pendingPAT: newPossessor
+      };
+    }
     return {
       ...state,
       ballOn: newBallOn,
-      possession: possession === "us" ? "them" : "us",
+      possession: newPossessor,
+      down: 1,
+      setStartYard: newBallOn
+    };
+  }
+  if (play.type === "fumble") {
+    // A fumble happens at the ball carrier's current spot — no "air yards"
+    // step, unlike an interception.
+    const ret = Number(play.yards) || 0;
+    const newPossessor = possession === "us" ? "them" : "us";
+    const newBallOn = clamp(newPossessor === "us" ? ballOn + ret : ballOn - ret, 0, settings.fieldLength);
+    const reachedGoal = newPossessor === "us" ? newBallOn >= settings.fieldLength : newBallOn <= 0;
+    if (reachedGoal) {
+      return {
+        ...state,
+        score: {
+          ...score,
+          [newPossessor]: (score[newPossessor] || 0) + settings.touchdownPoints
+        },
+        ballOn: newPossessor === "us" ? settings.fieldLength : 0,
+        possession: newPossessor,
+        pendingPAT: newPossessor
+      };
+    }
+    return {
+      ...state,
+      ballOn: newBallOn,
+      possession: newPossessor,
       down: 1,
       setStartYard: newBallOn
     };
@@ -411,7 +443,7 @@ function initialGameState(game) {
       them: 0
     },
     pendingPAT: null,
-    currentQBId: null
+    currentQBId: game.initialQBId || null
   };
 }
 function computeState(game) {
@@ -467,12 +499,17 @@ function computePlayerStats(game) {
     if (p.playerId) {
       if (typeof p.yards === "number" && ["run", "pass_complete", "sack"].includes(p.type)) bump(p.playerId).yards += p.yards;
       if (["run", "pass_complete"].includes(p.type)) bump(p.playerId).touches += 1;
-      if (["interception", "fumble"].includes(p.type)) bump(p.playerId).turnovers += 1;
     }
+    // A turnover only counts against one of our players when WE gave the
+    // ball away — crediting a "turnover" to the defender who intercepted
+    // or recovered it would be backwards, since that's a good play for us.
+    if (p.type === "interception" && p.possession === "us" && p.passerId) bump(p.passerId).turnovers += 1;
+    if (p.type === "fumble" && p.possession === "us" && p.playerId) bump(p.playerId).turnovers += 1;
     const scored = scoringByPlayId.get(p.id);
     if (scored && scored.possession === "us" && p.playerId) {
       // Credit the TD to the receiver on a pass, the ball carrier on a run,
-      // or whoever the coach named as the scorer on a manually-logged TD.
+      // the returner on a defensive score, or the coach-named scorer on an
+      // old, pre-automatic-detection touchdown entry.
       bump(p.playerId).tds += 1;
     }
   }
@@ -713,6 +750,7 @@ table { border-collapse: collapse; }
 .mt-4 { margin-top: 1rem; }
 .mt-6 { margin-top: 1.5rem; }
 .mt-2\.5 { margin-top: 0.625rem; }
+.mt-1\.5 { margin-top: 0.375rem; }
 .mb-0 { margin-bottom: 0; }
 .mb-1 { margin-bottom: 0.25rem; }
 .mb-1\.5 { margin-bottom: 0.375rem; }
@@ -1734,11 +1772,17 @@ function GameSetup({
   const [opponent, setOpponent] = useState("");
   const [possession, setPossession] = useState("us");
   const [presentIds, setPresentIds] = useState(team.roster.map(p => p.id));
+  const [qbId, setQbId] = useState("");
+  const presentRoster = team.roster.filter(p => presentIds.includes(p.id));
+  const qbValid = presentRoster.some(p => p.id === qbId);
+  const needsQB = presentRoster.length > 0;
+  const canStart = opponent.trim() && (!needsQB || qbValid);
   function togglePresent(id) {
     setPresentIds(cur => cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+    if (id === qbId) setQbId("");
   }
   function start() {
-    if (!opponent.trim()) return;
+    if (!canStart) return;
     onStart({
       id: uid(),
       teamId: team.id,
@@ -1748,6 +1792,7 @@ function GameSetup({
       status: "live",
       presentIds,
       initialPossession: possession,
+      initialQBId: needsQB ? qbId : null,
       plays: []
     });
   }
@@ -1785,9 +1830,20 @@ function GameSetup({
     onClick: () => togglePresent(p.id)
   }, p.number ? `#${p.number} ` : "", p.name))), team.roster.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
-  }, "Add players to the roster first — you can still start without them."))), /*#__PURE__*/React.createElement("button", {
+  }, "Add players to the roster first — you can still start without them.")), needsQB && /*#__PURE__*/React.createElement(Field, {
+    label: "Starting QB"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-2.5"
+  }, presentRoster.map(p => /*#__PURE__*/React.createElement(Chip, {
+    key: p.id,
+    active: qbId === p.id,
+    onClick: () => setQbId(p.id)
+  }, p.number ? `#${p.number} ` : "", p.name))), !qbValid && /*#__PURE__*/React.createElement("p", {
+    className: "text-muted-4 text-sm mt-2"
+  }, "Required before you can start the game."))), /*#__PURE__*/React.createElement("button", {
     onClick: start,
-    className: "btn-primary w-full text-base mt-6"
+    disabled: !canStart,
+    className: "btn-primary w-full text-base mt-6 disabled-dim-60"
   }, "Start game"), /*#__PURE__*/React.createElement("p", {
     className: "text-center text-xs text-muted-5 mt-3"
   }, "No kickoff — the receiving team starts at their own 14."));
@@ -1814,17 +1870,27 @@ function LiveGame({
   const derived = useMemo(() => computeState(game), [game]);
   const scoringPlayIds = useMemo(() => new Set(computeScoringPlays(game).map(s => s.playId)), [game]);
   const currentQB = settings.roster.find(p => p.id === derived.currentQBId);
-  function addPlay(play) {
-    const entry = {
-      id: uid(),
-      quarter: derived.quarter,
-      timestamp: Date.now(),
-      ...play
-    };
+  function addPlays(playList) {
+    let state = derived;
+    const entries = [];
+    for (const play of playList) {
+      const entry = {
+        id: uid(),
+        quarter: state.quarter,
+        possession: state.possession,
+        timestamp: Date.now(),
+        ...play
+      };
+      entries.push(entry);
+      state = applyPlayToState(state, entry, settings);
+    }
     onChange({
       ...game,
-      plays: [...game.plays, entry]
+      plays: [...game.plays, ...entries]
     });
+  }
+  function addPlay(play) {
+    addPlays([play]);
   }
   function removePlay(playId) {
     onChange({
@@ -1854,12 +1920,30 @@ function LiveGame({
       playerId: payload.playerId || null
     };
     if (payload.passerId) entry.passerId = payload.passerId;
-    if (payload.scoringPlayType) entry.scoringPlayType = payload.scoringPlayType;
+    if (type === "interception") entry.airYards = Number(payload.airYards) || 0;
     if (type === "sack") entry.yards = -Math.abs(Number(payload.yards) || 0);else if (["run", "pass_complete", "interception", "fumble"].includes(type)) entry.yards = Number(payload.yards) || 0;else if (type === "penalty") {
       entry.yards = Math.abs(Number(payload.yards) || 0);
       entry.on = payload.on;
     }
-    addPlay(entry);
+    const playsToAdd = [entry];
+    if (payload.fumbledAfter) {
+      // Fold this play against the current state to see whether it already
+      // scored — a fumble can't happen after the play is already dead in
+      // the end zone, so skip chaining one on in that case.
+      const stateAfterFirst = applyPlayToState(derived, {
+        ...entry,
+        id: "preview"
+      }, settings);
+      if (!stateAfterFirst.pendingPAT) {
+        playsToAdd.push({
+          type: "fumble",
+          playerId: entry.playerId || null,
+          // the same player who had the ball when it came loose
+          yards: payload.fumbleReturnYards || 0
+        });
+      }
+    }
+    addPlays(playsToAdd);
     setDraft(null);
   }
   function handlePAT(success, isTwoPoint) {
@@ -2115,7 +2199,7 @@ function PlayLogRow({
     className: "text-muted-4 font-mono w-9 shrink-0 text-xs"
   }, "Q", play.quarter || 1), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
-  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
+  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : ""}` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
@@ -2133,22 +2217,26 @@ function PlayFormModal({
   onConfirm
 }) {
   const [yards, setYards] = useState("");
+  const [airYards, setAirYards] = useState("");
   const [isLoss, setIsLoss] = useState(false);
   const [playerId, setPlayerId] = useState("");
   const [passerId, setPasserId] = useState(currentQBId || "");
   const [on, setOn] = useState("them");
-  const [scoringPlayType, setScoringPlayType] = useState("run");
+  const [fumbledAfter, setFumbledAfter] = useState(false);
+  const [fumbleReturnYards, setFumbleReturnYards] = useState("");
   const meta = PLAY_TYPES.find(t => t.id === draft.type);
-  const showPasser = meta.needsPasser || meta.needsScoringType && scoringPlayType === "pass";
+  const showPasser = meta.needsPasser;
   function confirm() {
     const magnitude = Math.abs(Number(yards)) || 0;
     const finalYards = meta.signable && isLoss ? -magnitude : magnitude;
     onConfirm({
       yards: finalYards,
+      airYards: meta.needsAirYards ? Math.abs(Number(airYards)) || 0 : undefined,
       playerId,
       passerId: showPasser ? passerId : "",
       on,
-      scoringPlayType: meta.needsScoringType ? scoringPlayType : null
+      fumbledAfter: meta.fumbleToggle ? fumbledAfter : false,
+      fumbleReturnYards: Math.abs(Number(fumbleReturnYards)) || 0
     });
   }
   return /*#__PURE__*/React.createElement("div", {
@@ -2164,15 +2252,7 @@ function PlayFormModal({
     className: "p-2 -mr-2 text-muted-3"
   }, /*#__PURE__*/React.createElement(X, {
     size: 20
-  }))), meta.needsScoringType && /*#__PURE__*/React.createElement(Field, {
-    label: "How'd they score?"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mb-1"
-  }, SCORING_PLAY_TYPES.map(t => /*#__PURE__*/React.createElement(Chip, {
-    key: t.id,
-    active: scoringPlayType === t.id,
-    onClick: () => setScoringPlayType(t.id)
-  }, t.label)))), meta.needsOn && /*#__PURE__*/React.createElement(Field, {
+  }))), meta.needsOn && /*#__PURE__*/React.createElement(Field, {
     label: "Penalty on"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5"
@@ -2182,7 +2262,19 @@ function PlayFormModal({
   }, "Opponent"), /*#__PURE__*/React.createElement(Chip, {
     active: on === "us",
     onClick: () => setOn("us")
-  }, "Us"))), meta.needsYards && /*#__PURE__*/React.createElement(Field, {
+  }, "Us"))), meta.needsAirYards && /*#__PURE__*/React.createElement(Field, {
+    label: meta.airYardsLabel
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    min: "0",
+    value: airYards,
+    onChange: e => setAirYards(e.target.value),
+    className: inputCls,
+    placeholder: "0"
+  }), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-muted-4 mt-1.5"
+  }, "How far downfield the pass was thrown before it was picked off — 0 if it was tipped or picked right at the line.")), meta.needsYards && /*#__PURE__*/React.createElement(Field, {
     label: meta.yardsLabel
   }, /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
@@ -2223,7 +2315,29 @@ function PlayFormModal({
   }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.number ? `#${p.number} ` : "", p.name)))), /*#__PURE__*/React.createElement("button", {
+  }, p.number ? `#${p.number} ` : "", p.name)))), meta.fumbleToggle && /*#__PURE__*/React.createElement(Field, {
+    label: meta.fumbleToggle
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-2.5"
+  }, /*#__PURE__*/React.createElement(Chip, {
+    active: !fumbledAfter,
+    onClick: () => setFumbledAfter(false)
+  }, "No"), /*#__PURE__*/React.createElement(Chip, {
+    active: fumbledAfter,
+    onClick: () => setFumbledAfter(true)
+  }, "Yes, lost it")), fumbledAfter && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2.5"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
+  }, "Their return yards (from the fumble spot)"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    min: "0",
+    value: fumbleReturnYards,
+    onChange: e => setFumbleReturnYards(e.target.value),
+    className: inputCls,
+    placeholder: "0"
+  }))), /*#__PURE__*/React.createElement("button", {
     onClick: confirm,
     className: "btn-primary w-full text-base mt-3"
   }, /*#__PURE__*/React.createElement(Check, {
