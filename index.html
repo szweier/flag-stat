@@ -2847,7 +2847,7 @@ function SeasonStats({
   }, team.name, " — Season Stats"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm"
   }, "Record: ", record.w, "-", record.l, record.t ? `-${record.t}` : "", " · ", record.pf, " points for · ", record.pa, " points against")), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2.5 mb-6"
+    className: "grid grid-cols-3 gap-2.5 mb-6 no-print"
   }, /*#__PURE__*/React.createElement(StatBlock, {
     label: "Record",
     value: `${record.w}-${record.l}${record.t ? `-${record.t}` : ""}`
@@ -2961,9 +2961,11 @@ function SeasonStats({
   }))))), !loading && sortedIds.length === 0 && sortedQBIds.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-8"
   }, "No completed games with logged plays yet this season."), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
-  }, "Season schedule"), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold no-print"
+  }, "Season schedule"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-muted-5 mb-2.5 no-print"
+  }, "Not included in the PDF export, to keep it fast — use CSV export if you want the full schedule and results."), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2 no-print"
   }, [...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(g => {
     const s = computeState(g).score;
     const win = g.status === "final" ? s.us > s.them ? "W" : s.us < s.them ? "L" : "T" : null;
