@@ -33,13 +33,12 @@
 
 <script>
   const firebaseConfig = {
-    apiKey: "AIzaSyDSKBYBQsIfqAwvq6zSTg_AumWoF-z1w10",
-    authDomain: "flag-stat.firebaseapp.com",
-    projectId: "flag-stat",
-    storageBucket: "flag-stat.firebasestorage.app",
-    messagingSenderId: "995825639185",
-    appId: "1:995825639185:web:01fe75a71f6ee8f8c476b0",
-    measurementId: "G-944HWX9LVR"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID",
   };
 
   firebase.initializeApp(firebaseConfig);
@@ -47,16 +46,9 @@
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
 </script>
-<script data-type="module" type="text/babel">
+
+<script type="text/babel" data-presets="react,stage-3">
 const { useState, useEffect, useMemo } = React;
-
-// Shared form input styling used throughout the app.
-const inputCls = "w-full bg-ink border border-soft-15 rounded-md px-3 py-2.5 text-primary placeholder:text-muted-5 focus-gold";
-
-// Clamp a number to an inclusive range.
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
 
 // ============================================================
 // lightweight icon stand-ins (no icon library dependency)
@@ -91,6 +83,10 @@ const SkipForward = (p) => <Icon {...p}>{"\u23ED"}</Icon>;
 const AlertTriangle = (p) => <Icon {...p}>{"\u26A0"}</Icon>;
 const Sparkles = (p) => <Icon {...p}>{"\u2728"}</Icon>;
 
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const inputCls = "w-full bg-ink border border-soft-15 rounded-md px-3 py-2.5 text-base outline-none focus-gold text-primary";
+
 const FIELD_LENGTHS = [40, 50, 60, 70, 80, 100];
 const FIELD_WIDTHS = [25, 30, 35, 40, 53];
 const PLAY_TYPES = [
@@ -110,6 +106,12 @@ PLAY_LABELS.pat1 = "PAT (1pt)";
 PLAY_LABELS.pat2 = "PAT (2pt)";
 PLAY_LABELS.quarter_end = "End of quarter";
 PLAY_LABELS.possession_change = "Possession change";
+
+// No kickoffs: every new drive starts at the offense's own 14-yard line.
+function ownYardLine(team, settings) {
+  const raw = team === "us" ? 14 : settings.fieldLength - 14;
+  return Math.max(0, Math.min(settings.fieldLength, raw));
+}
 
 // ============================================================
 // game engine — plays are the single source of truth.
@@ -132,27 +134,28 @@ function applyPlayToState(state, play, settings) {
       const pts = play.type === "pat2" ? 2 : 1;
       newScore = { ...score, [pendingPAT]: (score[pendingPAT] || 0) + pts };
     }
-    const mid = Math.round(settings.fieldLength / 2);
+    const nextPossession = pendingPAT === "us" ? "them" : "us";
+    const spot = ownYardLine(nextPossession, settings);
     return {
       ...state,
       score: newScore,
       pendingPAT: null,
-      possession: pendingPAT === "us" ? "them" : "us",
+      possession: nextPossession,
       down: 1,
-      ballOn: mid,
-      setStartYard: mid,
+      ballOn: spot,
+      setStartYard: spot,
     };
   }
   if (play.type === "safety") {
     const other = possession === "us" ? "them" : "us";
-    const mid = Math.round(settings.fieldLength / 2);
+    const spot = ownYardLine(other, settings);
     return {
       ...state,
       score: { ...score, [other]: (score[other] || 0) + 2 },
       possession: other,
       down: 1,
-      ballOn: mid,
-      setStartYard: mid,
+      ballOn: spot,
+      setStartYard: spot,
     };
   }
   if (play.type === "touchdown") {
@@ -222,12 +225,13 @@ function applyPlayToState(state, play, settings) {
 
 function computeState(game) {
   const settings = game.teamSettings;
-  const mid = Math.round(settings.fieldLength / 2);
+  const startTeam = game.initialPossession || "us";
+  const startSpot = ownYardLine(startTeam, settings);
   let state = {
     down: 1,
-    ballOn: mid,
-    setStartYard: mid,
-    possession: game.initialPossession || "us",
+    ballOn: startSpot,
+    setStartYard: startSpot,
+    possession: startTeam,
     quarter: 1,
     score: { us: 0, them: 0 },
     pendingPAT: null,
@@ -280,11 +284,11 @@ const DEMO_TEAM = {
   yardsPerFirstDown: 15,
   touchdownPoints: 6,
   roster: [
-    { id: 1, name: "Jordan Lee", number: "7" },
-    { id: 2, name: "Sam Rivera", number: "12" },
-    { id: 3, name: "Casey Kim", number: "3" },
-    { id: 4, name: "Morgan Diaz", number: "88" },
-    { id: 5, name: "Avery Chen", number: "21" },
+    { id: uid(), name: "Jordan Lee", number: "7" },
+    { id: uid(), name: "Sam Rivera", number: "12" },
+    { id: uid(), name: "Casey Kim", number: "3" },
+    { id: uid(), name: "Morgan Diaz", number: "88" },
+    { id: uid(), name: "Avery Chen", number: "21" },
   ],
 };
 
@@ -900,55 +904,29 @@ function GameSetup({ team, onCancel, onStart }) {
   const [opponent, setOpponent] = useState("");
   const [possession, setPossession] = useState("us");
   const [presentIds, setPresentIds] = useState(team.roster.map((p) => p.id));
-  const [error, setError] = useState("");
-  const [starting, setStarting] = useState(false);
 
   function togglePresent(id) {
     setPresentIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   }
-
-  async function start() {
-    const opponentName = opponent.trim();
-    if (!opponentName) {
-      setError("Enter an opponent team name before starting the game.");
-      return;
-    }
-
-    setError("");
-    setStarting(true);
-
-    try {
-      await onStart({
-        id: uid(),
-        teamId: team.id,
-        teamSettings: team,
-        opponent: opponentName,
-        date: new Date().toISOString().slice(0, 10),
-        status: "live",
-        presentIds,
-        initialPossession: possession,
-        plays: [],
-      });
-    } catch (err) {
-      console.error("Unable to start game:", err);
-      setError(err?.message || "Unable to start the game. Please check your connection and try again.");
-      setStarting(false);
-    }
+  function start() {
+    if (!opponent.trim()) return;
+    onStart({
+      id: uid(),
+      teamId: team.id,
+      teamSettings: team,
+      opponent: opponent.trim(),
+      date: new Date().toISOString().slice(0, 10),
+      status: "live",
+      presentIds,
+      initialPossession: possession,
+      plays: [],
+    });
   }
 
   return (
     <div className="max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6">
       <BackHeader title="New game" onBack={onCancel} />
-      <Field label="Opponent">
-        <input
-          value={opponent}
-          onChange={(e) => { setOpponent(e.target.value); setError(""); }}
-          onKeyDown={(e) => { if (e.key === "Enter") start(); }}
-          className={inputCls}
-          placeholder="Opponent team name"
-          autoFocus
-        />
-      </Field>
+      <Field label="Opponent"><input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} placeholder="Opponent team name" /></Field>
       <Field label="Who receives first?">
         <div className="grid grid-cols-2 gap-2">
           <Chip active={possession === "us"} onClick={() => setPossession("us")}>{team.name}</Chip>
@@ -961,18 +939,7 @@ function GameSetup({ team, onCancel, onStart }) {
         </div>
         {team.roster.length === 0 && <p className="text-muted-4 text-sm">Add players to the roster first — you can still start without them.</p>}
       </Field>
-      {error && (
-        <div className="mt-4 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-sm text-red-300" role="alert">
-          {error}
-        </div>
-      )}
-      <button
-        onClick={start}
-        disabled={starting}
-        className="w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-4 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {starting ? "Starting…" : "Kickoff"}
-      </button>
+      <button onClick={start} className="w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-4">Kickoff</button>
     </div>
   );
 }
@@ -1013,7 +980,7 @@ function LiveGame({ game, onChange, onEnd, onExit }) {
     setDraft(null);
   }
   function handlePAT(success, isTwoPoint) {
-    addPlay({ type: isTwoPoint ? "pat2" : "pat1", result: success ? "good" : "no_good" });
+    addPlay({ type: isTwoPoint ? "pat2" : "pat1", result: success ? "good" : "no_good", spot: isTwoPoint ? 10 : 5 });
   }
 
   const visiblePlays = [...game.plays].reverse();
@@ -1045,10 +1012,10 @@ function LiveGame({ game, onChange, onEnd, onExit }) {
         <div className="bg-panel border border-soft-10 rounded-lg p-6 text-center mt-4">
           <p className="mb-4 font-semibold">Touchdown! Choose the try for {derived.pendingPAT === "us" ? settings.name : game.opponent}:</p>
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => handlePAT(true, false)} className="bg-green rounded-md py-4 font-semibold">1pt Good</button>
-            <button onClick={() => handlePAT(false, false)} className="bg-red-dim rounded-md py-4 font-semibold">1pt No Good</button>
-            <button onClick={() => handlePAT(true, true)} className="bg-green rounded-md py-4 font-semibold">2pt Good</button>
-            <button onClick={() => handlePAT(false, true)} className="bg-red-dim rounded-md py-4 font-semibold">2pt No Good</button>
+            <button onClick={() => handlePAT(true, false)} className="bg-green rounded-md py-4 font-semibold">1pt (from 5) Good</button>
+            <button onClick={() => handlePAT(false, false)} className="bg-red-dim rounded-md py-4 font-semibold">1pt (from 5) No Good</button>
+            <button onClick={() => handlePAT(true, true)} className="bg-green rounded-md py-4 font-semibold">2pt (from 10) Good</button>
+            <button onClick={() => handlePAT(false, true)} className="bg-red-dim rounded-md py-4 font-semibold">2pt (from 10) No Good</button>
           </div>
         </div>
       </div>
@@ -1148,6 +1115,7 @@ function PlayLogRow({ play, roster, team, opponent, onDelete }) {
         {play.playerId && player ? ` · ${player.name}` : ""}
         {typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd` : ""}
         {play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : ""}
+        {(play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : ""}
       </span>
       {play.type === "touchdown" && <Award size={13} className="text-gold shrink-0 mr-2" />}
       {onDelete && <button onClick={onDelete} className="text-muted-5 hover-text-red p-1 shrink-0"><X size={14} /></button>}
