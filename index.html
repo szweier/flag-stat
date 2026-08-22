@@ -206,6 +206,37 @@ function ownYardLine(team, settings) {
   return Math.max(0, Math.min(settings.fieldLength, raw));
 }
 
+// Real yard lines never exceed half the field length on either side — a
+// "65" on a 70-yard field isn't a thing; that's "their 5". ballOn is always
+// stored as yards from our own goal (0) toward theirs (fieldLength), so the
+// conversion to how a coach would actually say it doesn't need to know who
+// currently has the ball at all.
+function formatYardLine(ballOn, fieldLength) {
+  const half = fieldLength / 2;
+  const rounded = Math.round(ballOn);
+  if (Math.abs(ballOn - half) < 0.5) return "midfield";
+  if (ballOn < half) return `own ${rounded}`;
+  return `their ${Math.round(fieldLength - ballOn)}`;
+}
+
+// The inverse of formatYardLine — breaks a position into the same
+// {side, yardLine} shape a coach thinks in, for pre-filling a form.
+function decomposeYardLine(ballOn, fieldLength) {
+  const half = fieldLength / 2;
+  if (Math.abs(ballOn - half) < 0.5) return {
+    side: "mid",
+    yardLine: 0
+  };
+  if (ballOn < half) return {
+    side: "own",
+    yardLine: Math.round(ballOn)
+  };
+  return {
+    side: "their",
+    yardLine: Math.round(fieldLength - ballOn)
+  };
+}
+
 // ============================================================
 // game engine — plays are the single source of truth.
 // Score, down, distance, ball position, and possession are all
@@ -235,11 +266,17 @@ function applyPlayToState(state, play, settings) {
     };
   }
   if (play.type === "possession_change") {
+    // A generic possession change doesn't necessarily happen at the same
+    // spot — a punt is the obvious case — so an explicit new position can
+    // be supplied. Falls back to the current spot for older logged plays
+    // that predate this, or when nothing was specified.
+    const newBallOn = typeof play.ballOn === "number" ? clamp(play.ballOn, 0, settings.fieldLength) : ballOn;
     return {
       ...state,
       possession: possession === "us" ? "them" : "us",
       down: 1,
-      setStartYard: ballOn
+      ballOn: newBallOn,
+      setStartYard: newBallOn
     };
   }
   if (play.type === "pat1" || play.type === "pat2") {
@@ -754,6 +791,7 @@ table { border-collapse: collapse; }
 .mt-2 { margin-top: 0.5rem; }
 .mt-3 { margin-top: 0.75rem; }
 .mt-4 { margin-top: 1rem; }
+.mt-5 { margin-top: 1.25rem; }
 .mt-6 { margin-top: 1.5rem; }
 .mt-2\.5 { margin-top: 0.625rem; }
 .mt-1\.5 { margin-top: 0.375rem; }
@@ -772,6 +810,7 @@ table { border-collapse: collapse; }
 
 /* sizing */
 .w-1\.5 { width: 0.375rem; }
+.w-2 { width: 0.5rem; }
 .w-5 { width: 1.25rem; }
 .w-8 { width: 2rem; }
 .w-14 { width: 3.5rem; }
@@ -1930,6 +1969,7 @@ function LiveGame({
   const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
   const [showFullLog, setShowFullLog] = useState(false);
   const [qbPickerOpen, setQbPickerOpen] = useState(false);
+  const [changeBallOpen, setChangeBallOpen] = useState(false);
   const settings = game.teamSettings;
   const roster = settings.roster.filter(p => {
     var _game$presentIds;
@@ -2032,6 +2072,13 @@ function LiveGame({
     });
     setQbPickerOpen(false);
   }
+  function handleChangeBall(newBallOn) {
+    addPlay({
+      type: "possession_change",
+      ballOn: newBallOn
+    });
+    setChangeBallOpen(false);
+  }
   const visiblePlays = [...game.plays].reverse();
   const shownPlays = showFullLog ? visiblePlays : visiblePlays.slice(0, 10);
   const scoreboard = /*#__PURE__*/React.createElement("div", {
@@ -2061,7 +2108,7 @@ function LiveGame({
   }, /*#__PURE__*/React.createElement(CircleDot, {
     size: 12,
     className: derived.possession === "us" ? "text-gold" : "text-blue"
-  }), " ", derived.possession === "us" ? settings.name : game.opponent, " ball"), /*#__PURE__*/React.createElement("span", null, "Down ", derived.down, "/", settings.numDowns), /*#__PURE__*/React.createElement("span", null, derived.ballOn, " yd line")), /*#__PURE__*/React.createElement("button", {
+  }), " ", derived.possession === "us" ? settings.name : game.opponent, " ball"), /*#__PURE__*/React.createElement("span", null, "Down ", derived.down, "/", settings.numDowns), /*#__PURE__*/React.createElement("span", null, formatYardLine(derived.ballOn, settings.fieldLength))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setQbPickerOpen(true),
     className: "w-full flex items-center justify-between font-mono text-xs text-muted-2 border-t border-soft-10 pt-3 mt-3 -mb-1"
   }, /*#__PURE__*/React.createElement("span", null, "QB: ", /*#__PURE__*/React.createElement("span", {
@@ -2113,7 +2160,7 @@ function LiveGame({
   })), scoreboard, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5 mb-5 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => handleInstant("possession_change"),
+    onClick: () => setChangeBallOpen(true),
     className: "btn-outline flex-col space-x-1.5 text-xs py-3.5"
   }, /*#__PURE__*/React.createElement(ArrowLeftRight, {
     size: 18
@@ -2177,6 +2224,11 @@ function LiveGame({
     currentQBId: derived.currentQBId,
     onCancel: () => setQbPickerOpen(false),
     onConfirm: handleSetQB
+  }), changeBallOpen && /*#__PURE__*/React.createElement(ChangeBallModal, {
+    fieldLength: settings.fieldLength,
+    currentBallOn: derived.ballOn,
+    onCancel: () => setChangeBallOpen(false),
+    onConfirm: handleChangeBall
   }), confirmDeletePlay && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Remove this play?",
     message: "Everything after it in the log will be recalculated automatically.",
@@ -2220,6 +2272,66 @@ function QBPickerModal({
     className: "btn-primary w-full text-base disabled-dim-60"
   }, "Set as QB")));
 }
+function ChangeBallModal({
+  fieldLength,
+  currentBallOn,
+  onCancel,
+  onConfirm
+}) {
+  const initial = decomposeYardLine(currentBallOn, fieldLength);
+  const [side, setSide] = useState(initial.side);
+  const [yardLine, setYardLine] = useState(initial.side === "mid" ? "" : String(initial.yardLine));
+  const half = fieldLength / 2;
+  function confirm() {
+    let newBallOn;
+    if (side === "mid") newBallOn = half;else {
+      const yl = clamp(Number(yardLine) || 0, 0, half);
+      newBallOn = side === "own" ? yl : fieldLength - yl;
+    }
+    onConfirm(newBallOn);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, "Change ball"), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancel,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-3 mb-4"
+  }, "Where's the ball starting from? This isn't tied to a specific play — good for a punt, or anything else that moves the spot."), /*#__PURE__*/React.createElement(Field, {
+    label: "Field position"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-2.5 mb-3"
+  }, /*#__PURE__*/React.createElement(Chip, {
+    active: side === "own",
+    onClick: () => setSide("own")
+  }, "Our side"), /*#__PURE__*/React.createElement(Chip, {
+    active: side === "mid",
+    onClick: () => setSide("mid")
+  }, "Midfield"), /*#__PURE__*/React.createElement(Chip, {
+    active: side === "their",
+    onClick: () => setSide("their")
+  }, "Their side")), side !== "mid" && /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    min: "0",
+    max: half,
+    value: yardLine,
+    onChange: e => setYardLine(e.target.value),
+    className: inputCls,
+    placeholder: `Yard line (0-${half})`
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: confirm,
+    className: "btn-primary w-full text-base mt-5"
+  }, "Confirm")));
+}
 function FieldVisual({
   length,
   ballOn,
@@ -2228,11 +2340,11 @@ function FieldVisual({
   firstDownMode
 }) {
   const pct = clamp(ballOn / length * 100, 0, 100);
-  const showMarker = firstDownMode === "everyN";
+  const yardLineLabel = formatYardLine(ballOn, length);
   return /*#__PURE__*/React.createElement("div", {
     className: "mt-3"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "relative h-4 rounded-sm overflow-hidden border border-soft-20 bg-green"
+    className: "relative h-5 rounded-sm overflow-hidden border border-soft-20 bg-green"
   }, /*#__PURE__*/React.createElement("div", {
     className: "absolute inset-y-0 left-0 bg-gold-dim border-r border-soft-20",
     style: {
@@ -2246,12 +2358,23 @@ function FieldVisual({
   }), /*#__PURE__*/React.createElement("div", {
     className: "absolute inset-y-0 left-1/2 w-px bg-overlay-25"
   }), /*#__PURE__*/React.createElement("div", {
-    className: "absolute top-0 bottom-0 w-1.5 bg-gold",
+    className: "absolute top-0 bottom-0 w-2 bg-gold shadow",
     style: {
-      left: `calc(${pct}% - 3px)`
+      left: `calc(${pct}% - 4px)`
     }
   })), /*#__PURE__*/React.createElement("div", {
-    className: "flex justify-between text-xs font-mono text-muted-4 mt-1"
+    className: "relative mt-1",
+    style: {
+      height: "1.1rem"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "absolute text-xs font-mono font-bold text-gold",
+    style: {
+      left: `${pct}%`,
+      transform: pct < 8 ? "translateX(0)" : pct > 92 ? "translateX(-100%)" : "translateX(-50%)"
+    }
+  }, yardLineLabel)), /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between text-xs font-mono text-muted-4 mt-0.5"
   }, /*#__PURE__*/React.createElement("span", null, possession === "us" ? "your goal" : "their goal"), /*#__PURE__*/React.createElement("span", null, "midfield"), /*#__PURE__*/React.createElement("span", null, possession === "us" ? "their goal" : "your goal")));
 }
 function PlayLogRow({
