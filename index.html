@@ -174,6 +174,20 @@ const PLAY_TYPES = [{
   playerLabel: "Player (who lost it or recovered it)",
   yardsLabel: "Return yards"
 }, {
+  id: "punt",
+  label: "Punt",
+  color: "bg-blue",
+  modal: true,
+  needsYards: true,
+  yardsLabel: "Punt distance",
+  needsReturnYards: true,
+  returnYardsLabel: "Return yards (0 if none)",
+  needsPlayer: true,
+  playerLabel: "Returner",
+  needsPasser: true,
+  passerLabel: "Punter",
+  fumbleToggle: "Fumbled during the return?"
+}, {
   id: "penalty",
   label: "Penalty",
   color: "bg-blue",
@@ -373,6 +387,36 @@ function applyPlayToState(state, play, settings) {
     const ret = Number(play.yards) || 0;
     const newPossessor = possession === "us" ? "them" : "us";
     const newBallOn = clamp(newPossessor === "us" ? ballOn + ret : ballOn - ret, 0, settings.fieldLength);
+    const reachedGoal = newPossessor === "us" ? newBallOn >= settings.fieldLength : newBallOn <= 0;
+    if (reachedGoal) {
+      return {
+        ...state,
+        score: {
+          ...score,
+          [newPossessor]: (score[newPossessor] || 0) + settings.touchdownPoints
+        },
+        ballOn: newPossessor === "us" ? settings.fieldLength : 0,
+        possession: newPossessor,
+        pendingPAT: newPossessor
+      };
+    }
+    return {
+      ...state,
+      ballOn: newBallOn,
+      possession: newPossessor,
+      down: 1,
+      setStartYard: newBallOn
+    };
+  }
+  if (play.type === "punt") {
+    // Same two-step shape as an interception: the kick travels first (punt
+    // distance, from the line of scrimmage to where it's fielded), then the
+    // return happens from that spot.
+    const puntDistance = Number(play.yards) || 0;
+    const returnYards = Number(play.returnYards) || 0;
+    const landingSpot = clamp(possession === "us" ? ballOn + puntDistance : ballOn - puntDistance, 0, settings.fieldLength);
+    const newPossessor = possession === "us" ? "them" : "us";
+    const newBallOn = clamp(newPossessor === "us" ? landingSpot + returnYards : landingSpot - returnYards, 0, settings.fieldLength);
     const reachedGoal = newPossessor === "us" ? newBallOn >= settings.fieldLength : newBallOn <= 0;
     if (reachedGoal) {
       return {
@@ -2029,7 +2073,8 @@ function LiveGame({
     };
     if (payload.passerId) entry.passerId = payload.passerId;
     if (type === "interception") entry.airYards = Number(payload.airYards) || 0;
-    if (type === "sack") entry.yards = -Math.abs(Number(payload.yards) || 0);else if (["run", "pass_complete", "interception", "fumble"].includes(type)) entry.yards = Number(payload.yards) || 0;else if (type === "penalty") {
+    if (type === "punt") entry.returnYards = Number(payload.returnYards) || 0;
+    if (type === "sack") entry.yards = -Math.abs(Number(payload.yards) || 0);else if (["run", "pass_complete", "interception", "fumble", "punt"].includes(type)) entry.yards = Number(payload.yards) || 0;else if (type === "penalty") {
       entry.yards = Math.abs(Number(payload.yards) || 0);
       entry.on = payload.on;
     }
@@ -2395,7 +2440,7 @@ function PlayLogRow({
     className: "text-muted-4 font-mono w-9 shrink-0 text-xs"
   }, "Q", play.quarter || 1), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
-  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : ""}` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
+  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : play.type === "punt" ? " punt" : ""}` : "", play.type === "punt" && typeof play.returnYards === "number" && play.returnYards > 0 ? ` · ${play.returnYards} yd return` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
@@ -2416,6 +2461,7 @@ function PlayFormModal({
   const isOurBall = possession === "us";
   const [yards, setYards] = useState("");
   const [airYards, setAirYards] = useState("");
+  const [returnYards, setReturnYards] = useState("");
   const [isLoss, setIsLoss] = useState(false);
   const [playerId, setPlayerId] = useState("");
   const [passerId, setPasserId] = useState(currentQBId || "");
@@ -2433,9 +2479,9 @@ function PlayFormModal({
   let needsPlayer = baseMeta.needsPlayer;
   let needsPasser = baseMeta.needsPasser;
   let playerLabel = baseMeta.playerLabel;
-  if (draft.type === "interception") {
-    needsPlayer = !isOurBall; // it's ours to name only when THEY threw it and we picked it
-    needsPasser = isOurBall; // our QB only matters when WE threw it
+  if (draft.type === "interception" || draft.type === "punt") {
+    needsPlayer = !isOurBall; // returner is ours only when THEY threw/kicked it and we're fielding it
+    needsPasser = isOurBall; // passer/punter is ours only when WE had the ball
   } else if (draft.type === "fumble") {
     playerLabel = isOurBall ? "Who fumbled" : "Who recovered it";
   } else if (["run", "pass_complete", "pass_incomplete", "sack"].includes(draft.type) && !isOurBall) {
@@ -2445,8 +2491,9 @@ function PlayFormModal({
 
   // For a chained fumble (the "fumbled after this play?" toggle): figure
   // out who actually ends up with the ball afterward, so we only ask for
-  // a recovering player when it's genuinely one of ours.
-  const possessorBeforeChainedFumble = draft.type === "interception" ? isOurBall ? "them" : "us" : possession;
+  // a recovering player when it's genuinely one of ours. Interception and
+  // punt both flip possession as part of the play itself, before any chain.
+  const possessorBeforeChainedFumble = ["interception", "punt"].includes(draft.type) ? isOurBall ? "them" : "us" : possession;
   const possessorAfterChainedFumble = possessorBeforeChainedFumble === "us" ? "them" : "us";
   const chainNeedsRecoverer = possessorAfterChainedFumble === "us";
   function confirm() {
@@ -2455,6 +2502,7 @@ function PlayFormModal({
     onConfirm({
       yards: finalYards,
       airYards: baseMeta.needsAirYards ? Math.abs(Number(airYards)) || 0 : undefined,
+      returnYards: baseMeta.needsReturnYards ? Math.abs(Number(returnYards)) || 0 : undefined,
       playerId: needsPlayer ? playerId : "",
       passerId: needsPasser ? passerId : "",
       on,
@@ -2517,7 +2565,17 @@ function PlayFormModal({
   }, "Gain"), /*#__PURE__*/React.createElement(Chip, {
     active: isLoss,
     onClick: () => setIsLoss(true)
-  }, "Loss"))), needsPasser && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
+  }, "Loss"))), baseMeta.needsReturnYards && /*#__PURE__*/React.createElement(Field, {
+    label: baseMeta.returnYardsLabel
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    min: "0",
+    value: returnYards,
+    onChange: e => setReturnYards(e.target.value),
+    className: inputCls,
+    placeholder: "0"
+  })), needsPasser && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
     label: baseMeta.passerLabel || "Quarterback"
   }, /*#__PURE__*/React.createElement("select", {
     value: passerId,
