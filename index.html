@@ -677,12 +677,12 @@ table { border-collapse: collapse; }
 .justify-between { justify-content: space-between; }
 
 /* gap */
-.gap-1 { gap: 0.25rem; }
-.gap-1\.5 { gap: 0.375rem; }
-.gap-2 { gap: 0.5rem; }
-.gap-3 { gap: 0.75rem; }
-.gap-4 { gap: 1rem; }
-.gap-2\.5 { gap: 0.625rem; }
+.gap-1 > * { margin: 0.125rem; }
+.gap-1\.5 > * { margin: 0.1875rem; }
+.gap-2 > * { margin: 0.25rem; }
+.gap-3 > * { margin: 0.375rem; }
+.gap-4 > * { margin: 0.5rem; }
+.gap-2\.5 > * { margin: 0.3125rem; }
 
 /* space-between-children */
 .space-y-1\.5 > * + * { margin-top: 0.375rem; }
@@ -692,9 +692,10 @@ table { border-collapse: collapse; }
 .space-y-6 > * + * { margin-top: 1.5rem; }
 .space-y-2\.5 > * + * { margin-top: 0.625rem; }
 
-/* horizontal spacing for flex rows — margin-based on purpose, not flexbox
-   "gap", since flex gap isn't supported before Safari 14.1 (grid gap is
-   fine everywhere and still uses .gap-* + display:grid elsewhere). */
+/* horizontal spacing for flex rows — margin-based, not flexbox "gap".
+   .gap-* (used on grid/flex containers elsewhere) is also margin-based now,
+   applied per-child instead of relying on the CSS gap property at all —
+   simpler and removes any dependency on gap support in any layout mode. */
 .space-x-1 > * + * { margin-left: 0.25rem; }
 .space-x-1\.5 > * + * { margin-left: 0.375rem; }
 .space-x-2 > * + * { margin-left: 0.5rem; }
