@@ -50,6 +50,14 @@
 <script data-type="module" type="text/babel">
 const { useState, useEffect, useMemo } = React;
 
+// Shared form input styling used throughout the app.
+const inputCls = "w-full bg-ink border border-soft-15 rounded-md px-3 py-2.5 text-primary placeholder:text-muted-5 focus-gold";
+
+// Clamp a number to an inclusive range.
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
 // ============================================================
 // lightweight icon stand-ins (no icon library dependency)
 // ============================================================
