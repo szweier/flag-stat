@@ -101,7 +101,7 @@ const AlertTriangle = p => /*#__PURE__*/React.createElement(Icon, p, "\u26A0");
 const Sparkles = p => /*#__PURE__*/React.createElement(Icon, p, "\u2728");
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const inputCls = "w-full bg-ink border border-soft-15 rounded-md px-3 py-2.5 text-base outline-none focus-gold text-primary";
+const inputCls = "field-input";
 const FIELD_LENGTHS = [40, 50, 60, 70, 80, 100];
 const FIELD_WIDTHS = [25, 30, 35, 40, 53];
 const PLAY_TYPES = [{
@@ -515,6 +515,7 @@ table { border-collapse: collapse; }
 .gap-2 { gap: 0.5rem; }
 .gap-3 { gap: 0.75rem; }
 .gap-4 { gap: 1rem; }
+.gap-2\.5 { gap: 0.625rem; }
 
 /* space-between-children */
 .space-y-1\.5 > * + * { margin-top: 0.375rem; }
@@ -522,6 +523,7 @@ table { border-collapse: collapse; }
 .space-y-3 > * + * { margin-top: 0.75rem; }
 .space-y-4 > * + * { margin-top: 1rem; }
 .space-y-6 > * + * { margin-top: 1.5rem; }
+.space-y-2\.5 > * + * { margin-top: 0.625rem; }
 
 /* padding */
 .p-1 { padding: 0.25rem; }
@@ -532,25 +534,33 @@ table { border-collapse: collapse; }
 .p-5 { padding: 1.25rem; }
 .p-6 { padding: 1.5rem; }
 .p-8 { padding: 2rem; }
+.p-7 { padding: 1.75rem; }
+.p-10 { padding: 2.5rem; }
+.p-2\.5 { padding: 0.625rem; }
 .px-0 { padding-left: 0; padding-right: 0; }
 .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
 .px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
 .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
 .px-4 { padding-left: 1rem; padding-right: 1rem; }
 .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+.px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
 .py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
 .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
 .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
 .py-3\.5 { padding-top: 0.875rem; padding-bottom: 0.875rem; }
 .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.py-5 { padding-top: 1.25rem; padding-bottom: 1.25rem; }
 .pt-2 { padding-top: 0.5rem; }
 .pt-3 { padding-top: 0.75rem; }
 .pt-6 { padding-top: 1.5rem; }
+.pt-4 { padding-top: 1rem; }
 .pb-3 { padding-bottom: 0.75rem; }
 .pb-8 { padding-bottom: 2rem; }
 .pb-16 { padding-bottom: 4rem; }
 .pb-24 { padding-bottom: 6rem; }
+.pb-9 { padding-bottom: 2.25rem; }
 
 /* margin */
 .mx-auto { margin-left: auto; margin-right: auto; }
@@ -558,6 +568,8 @@ table { border-collapse: collapse; }
 .mr-2 { margin-right: 0.5rem; }
 .-ml-1 { margin-left: -0.25rem; }
 .-mr-2 { margin-right: -0.5rem; }
+.-mr-1 { margin-right: -0.25rem; }
+.-ml-2 { margin-left: -0.5rem; }
 .-mx-4 { margin-left: -1rem; margin-right: -1rem; }
 .mt-0\.5 { margin-top: 0.125rem; }
 .mt-1 { margin-top: 0.25rem; }
@@ -574,6 +586,8 @@ table { border-collapse: collapse; }
 .mb-6 { margin-bottom: 1.5rem; }
 .mb-7 { margin-bottom: 1.75rem; }
 .mb-8 { margin-bottom: 2rem; }
+.mb-2\.5 { margin-bottom: 0.625rem; }
+.mb-5 { margin-bottom: 1.25rem; }
 
 /* sizing */
 .w-1\.5 { width: 0.375rem; }
@@ -581,10 +595,13 @@ table { border-collapse: collapse; }
 .w-8 { width: 2rem; }
 .w-14 { width: 3.5rem; }
 .w-16 { width: 4rem; }
+.w-6 { width: 1.5rem; }
+.w-9 { width: 2.25rem; }
 .w-full { width: 100%; }
 .w-px { width: 1px; }
 .h-4 { height: 1rem; }
 .h-5 { height: 1.25rem; }
+.h-6 { height: 1.5rem; }
 .min-h-screen { min-height: 100vh; }
 .max-w-sm { max-width: 24rem; }
 .max-w-lg { max-width: 32rem; }
@@ -620,6 +637,8 @@ table { border-collapse: collapse; }
 .rounded-lg { border-radius: 0.5rem; }
 .rounded-full { border-radius: 9999px; }
 .rounded-t-2xl { border-top-left-radius: 1rem; border-top-right-radius: 1rem; }
+.rounded-xl { border-radius: 0.875rem; }
+.rounded-b-none { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
 /* shadow */
 .shadow { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.3), 0 1px 2px -1px rgba(0,0,0,0.3); }
@@ -638,6 +657,8 @@ table { border-collapse: collapse; }
 .text-2xl { font-size: 1.5rem; line-height: 2rem; }
 .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
 .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+.text-5xl { font-size: 3rem; line-height: 1; }
+.text-base { font-size: 1rem; line-height: 1.5rem; }
 .font-medium { font-weight: 500; }
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
@@ -664,6 +685,8 @@ table { border-collapse: collapse; }
   .sm\:items-center { align-items: center; }
   .sm\:border { border-width: 1px; border-style: solid; border-color: transparent; }
   .sm\:rounded-lg { border-radius: 0.5rem; }
+  .sm\:rounded-2xl { border-radius: 1rem; }
+  .sm\:pb-6 { padding-bottom: 1.5rem; }
   .sm\:col-span-1 { grid-column: span 1 / span 1; }
   .sm\:ml-auto { margin-left: auto; }
   .sm\:px-4 { padding-left: 1rem; padding-right: 1rem; }
@@ -724,6 +747,62 @@ table { border-collapse: collapse; }
   .disabled-dim-30:disabled { opacity: 0.3; }
 
   body, input, select, textarea, button { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  /* ============================================================
+     UI polish — reusable component classes + global tactile feel.
+     ============================================================ */
+  button { transition: transform 0.1s ease, filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; }
+  button:active:not(:disabled) { transform: scale(0.96); }
+  button:disabled { cursor: default; }
+
+  .card-panel { background: #1B1F2A; border: 1px solid rgba(255,255,255,0.08); border-radius: 1rem; box-shadow: 0 4px 18px rgba(0,0,0,0.28); }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    background: #E8B33D; color: #14171F; font-weight: 700;
+    padding: 0.9rem 1.25rem; border-radius: 0.75rem;
+    box-shadow: 0 2px 10px rgba(232,179,61,0.28);
+  }
+  .btn-primary:active:not(:disabled) { filter: brightness(0.94); }
+  .btn-primary:disabled { opacity: 0.6; }
+
+  .btn-danger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    background: #C1432E; color: #ffffff; font-weight: 700;
+    padding: 0.9rem 1.25rem; border-radius: 0.75rem;
+    box-shadow: 0 2px 10px rgba(193,67,46,0.28);
+  }
+  .btn-danger:active:not(:disabled) { filter: brightness(0.9); }
+
+  .btn-outline {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    background: rgba(255,255,255,0.02); border: 1.5px solid rgba(255,255,255,0.16);
+    color: #EDEFE7; font-weight: 600; padding: 0.8rem 1rem; border-radius: 0.7rem;
+  }
+  .btn-outline:active:not(:disabled) { background: rgba(255,255,255,0.08); }
+
+  .btn-outline-red {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    background: rgba(193,67,46,0.06); border: 1.5px solid #7A3225;
+    color: #E8735F; font-weight: 600; padding: 0.8rem 1rem; border-radius: 0.7rem;
+  }
+  .btn-outline-red:active:not(:disabled) { background: rgba(193,67,46,0.15); }
+
+  .btn-outline-gold {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+    background: rgba(232,179,61,0.06); border: 1.5px solid #8A6E2E;
+    color: #E8B33D; font-weight: 600; padding: 0.8rem 1.1rem; border-radius: 999px;
+  }
+  .btn-outline-gold:active:not(:disabled) { background: rgba(232,179,61,0.15); }
+
+  .hover-row:active { background: rgba(255,255,255,0.06); }
+
+  .field-input {
+    width: 100%; background: #14171F; border: 1.5px solid rgba(255,255,255,0.15);
+    border-radius: 0.7rem; padding: 0.85rem 1rem; font-size: 1rem; color: #EDEFE7;
+    outline: none; transition: border-color 0.15s ease;
+  }
+  .field-input:focus { border-color: #E8B33D; }
 `;
 
 // ============================================================
@@ -766,6 +845,28 @@ async function deleteGame(teamId, gameId) {
 }
 
 // ============================================================
+// Turns a raw Firestore/Firebase error into a message a coach can
+// actually act on, instead of a silent failure or a raw error code.
+// ============================================================
+function describeFirebaseError(err, context) {
+  const code = err && err.code || "";
+  const prefix = context ? `Couldn't ${context}` : "Something went wrong";
+  if (code === "permission-denied" || code === "firestore/permission-denied") {
+    return `${prefix} — your Firestore security rules may not be published yet. In the Firebase console, check Firestore Database > Rules and make sure firestore.rules has been pasted in and published.`;
+  }
+  if (code === "unavailable" || code === "network-request-failed" || code.includes("network")) {
+    return `${prefix} — couldn't reach the server. Check your internet connection and try again.`;
+  }
+  if (code === "unauthenticated") {
+    return `${prefix} — you've been signed out. Please log in again.`;
+  }
+  if (code.startsWith("auth/")) {
+    return err.message || `${prefix} — please try again.`;
+  }
+  return `${prefix}${err && err.message ? ": " + err.message : ". Please try again."}`;
+}
+
+// ============================================================
 // App root — Firebase auth state drives everything else
 // ============================================================
 function FlagStatApp() {
@@ -784,26 +885,38 @@ function FlagStatApp() {
     const unsub = teamsCol().where("ownerUid", "==", authUser.uid).onSnapshot(snap => setTeams(snap.docs.map(d => ({
       ...d.data(),
       id: d.id
-    }))), err => flash("Couldn't load teams: " + err.message));
+    }))), err => flash(describeFirebaseError(err, "load your teams")));
     return unsub;
   }, [authUser]);
   function flash(msg) {
     setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 5000);
   }
   async function createDemoTeam() {
-    const id = await createTeam(authUser.uid, DEMO_TEAM);
-    flash("Demo team created — try starting a game.");
+    try {
+      const id = await createTeam(authUser.uid, DEMO_TEAM);
+      flash("Demo team created — try starting a game.");
+    } catch (err) {
+      flash(describeFirebaseError(err, "create the demo team"));
+    }
   }
   async function handleDeleteTeam(team) {
-    await deleteTeamCascade(team.id);
-    flash("Team deleted.");
-    setScreen("dashboard");
+    try {
+      await deleteTeamCascade(team.id);
+      flash("Team deleted.");
+      setScreen("dashboard");
+    } catch (err) {
+      flash(describeFirebaseError(err, "delete that team"));
+    }
   }
   async function handleDeleteGame(teamId, game) {
-    await deleteGame(teamId, game.id);
-    flash("Game deleted.");
-    setScreen("dashboard");
+    try {
+      await deleteGame(teamId, game.id);
+      flash("Game deleted.");
+      setScreen("dashboard");
+    } catch (err) {
+      flash(describeFirebaseError(err, "delete that game"));
+    }
   }
   if (authUser === undefined) {
     return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("style", null, GLOBAL_STYLES), /*#__PURE__*/React.createElement("div", {
@@ -819,13 +932,14 @@ function FlagStatApp() {
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-ink text-primary font-sans"
   }, /*#__PURE__*/React.createElement("style", null, GLOBAL_STYLES), toast && /*#__PURE__*/React.createElement("div", {
-    className: "fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gold text-ink px-4 py-2 rounded-md font-semibold text-sm shadow-lg text-center",
+    className: "fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gold text-ink px-5 py-3 rounded-lg font-semibold text-sm shadow-lg text-center",
     style: {
-      maxWidth: "90vw"
+      maxWidth: "92vw"
     }
   }, toast), screen === "dashboard" && /*#__PURE__*/React.createElement(Dashboard, {
     authUser: authUser,
     teams: teams,
+    flash: flash,
     onLogout: () => auth.signOut(),
     onNewTeam: () => {
       setActiveTeam(null);
@@ -856,60 +970,77 @@ function FlagStatApp() {
     }
   }), screen === "seasonStats" && activeTeam && /*#__PURE__*/React.createElement(SeasonStats, {
     team: activeTeam,
-    onBack: () => setScreen("dashboard")
+    onBack: () => setScreen("dashboard"),
+    flash: flash
   }), screen === "teamForm" && /*#__PURE__*/React.createElement(TeamForm, {
     team: activeTeam,
     onCancel: () => setScreen("dashboard"),
     onDelete: activeTeam ? () => handleDeleteTeam(activeTeam) : null,
     onSave: async team => {
-      if (activeTeam) {
-        await updateTeam(activeTeam.id, team);
-        setActiveTeam({
-          ...activeTeam,
-          ...team
-        });
-      } else {
-        const id = await createTeam(authUser.uid, team);
-        setActiveTeam({
-          ...team,
-          id,
-          ownerUid: authUser.uid
-        });
+      try {
+        if (activeTeam) {
+          await updateTeam(activeTeam.id, team);
+          setActiveTeam({
+            ...activeTeam,
+            ...team
+          });
+        } else {
+          const id = await createTeam(authUser.uid, team);
+          setActiveTeam({
+            ...team,
+            id,
+            ownerUid: authUser.uid
+          });
+        }
+        flash("Team saved.");
+        setScreen("roster");
+      } catch (err) {
+        flash(describeFirebaseError(err, "save that team"));
       }
-      flash("Team saved.");
-      setScreen("roster");
     }
   }), screen === "roster" && activeTeam && /*#__PURE__*/React.createElement(RosterEditor, {
     team: activeTeam,
     onBack: () => setScreen("dashboard"),
     onSave: async roster => {
-      await updateTeam(activeTeam.id, {
-        roster
-      });
-      setActiveTeam({
-        ...activeTeam,
-        roster
-      });
+      try {
+        await updateTeam(activeTeam.id, {
+          roster
+        });
+        setActiveTeam({
+          ...activeTeam,
+          roster
+        });
+      } catch (err) {
+        flash(describeFirebaseError(err, "save the roster"));
+      }
     },
     onStartGame: () => setScreen("gameSetup")
   }), screen === "gameSetup" && activeTeam && /*#__PURE__*/React.createElement(GameSetup, {
     team: activeTeam,
     onCancel: () => setScreen("dashboard"),
     onStart: async game => {
-      const id = await createGame(activeTeam.id, game);
-      setActiveGame({
-        ...game,
-        id
-      });
-      setScreen("liveGame");
+      try {
+        const id = await createGame(activeTeam.id, game);
+        setActiveGame({
+          ...game,
+          id
+        });
+        setScreen("liveGame");
+      } catch (err) {
+        flash(describeFirebaseError(err, "start the game"));
+      }
     }
   }), screen === "liveGame" && activeGame && activeTeam && /*#__PURE__*/React.createElement(LiveGame, {
     game: activeGame,
     onChange: async g => {
       setActiveGame(g);
-      await updateGame(activeTeam.id, g.id, {
-        plays: g.plays
-      });
+      try {
+        await updateGame(activeTeam.id, g.id, {
+          plays: g.plays
+        });
+      } catch (err) {
+        flash(describeFirebaseError(err, "save that play — it's showing locally but may not have saved"));
+      }
     },
     onEnd: async g => {
       const finalGame = {
@@ -917,10 +1048,14 @@ function FlagStatApp() {
         status: "final"
       };
       setActiveGame(finalGame);
-      await updateGame(activeTeam.id, g.id, {
-        status: "final"
-      });
-      setScreen("gameSummary");
+      try {
+        await updateGame(activeTeam.id, g.id, {
+          status: "final"
+        });
+        setScreen("gameSummary");
+      } catch (err) {
+        flash(describeFirebaseError(err, "end the game"));
+      }
     },
     onExit: () => setScreen("dashboard")
   }), screen === "gameSummary" && activeGame && activeTeam && /*#__PURE__*/React.createElement(GameSummary, {
@@ -928,9 +1063,13 @@ function FlagStatApp() {
     onBack: () => setScreen("dashboard"),
     onChange: async g => {
       setActiveGame(g);
-      await updateGame(activeTeam.id, g.id, {
-        plays: g.plays
-      });
+      try {
+        await updateGame(activeTeam.id, g.id, {
+          plays: g.plays
+        });
+      } catch (err) {
+        flash(describeFirebaseError(err, "save that change"));
+      }
     },
     onDelete: () => handleDeleteGame(activeTeam.id, activeGame),
     onReopen: async g => {
@@ -939,10 +1078,14 @@ function FlagStatApp() {
         status: "live"
       };
       setActiveGame(reopened);
-      await updateGame(activeTeam.id, g.id, {
-        status: "live"
-      });
-      setScreen("liveGame");
+      try {
+        await updateGame(activeTeam.id, g.id, {
+          status: "live"
+        });
+        setScreen("liveGame");
+      } catch (err) {
+        flash(describeFirebaseError(err, "reopen the game"));
+      }
     },
     onEditMeta: async (g, meta) => {
       const updated = {
@@ -950,7 +1093,11 @@ function FlagStatApp() {
         ...meta
       };
       setActiveGame(updated);
-      await updateGame(activeTeam.id, g.id, meta);
+      try {
+        await updateGame(activeTeam.id, g.id, meta);
+      } catch (err) {
+        flash(describeFirebaseError(err, "save those changes"));
+      }
     }
   }));
 }
@@ -971,7 +1118,7 @@ function AuthScreen() {
     try {
       if (mode === "signup") await auth.createUserWithEmailAndPassword(email, password);else await auth.signInWithEmailAndPassword(email, password);
     } catch (err) {
-      setError(err.message);
+      setError(describeFirebaseError(err));
     }
     setBusy(false);
   }
@@ -980,23 +1127,25 @@ function AuthScreen() {
   }, /*#__PURE__*/React.createElement("div", {
     className: "w-full max-w-sm"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-2 justify-center mb-1"
+    className: "flex items-center gap-2 justify-center mb-2"
   }, /*#__PURE__*/React.createElement(Flag, {
     className: "text-gold",
-    size: 26
+    size: 30
   }), /*#__PURE__*/React.createElement("h1", {
-    className: "text-2xl font-extrabold tracking-tight uppercase"
+    className: "text-3xl font-extrabold tracking-tight uppercase"
   }, "FlagStat")), /*#__PURE__*/React.createElement("p", {
     className: "text-center text-muted-5 text-sm mb-8 font-mono"
   }, "coach-side play-by-play tracking"), /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg p-6"
+    className: "card-panel p-7"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex mb-6 rounded-md overflow-hidden border border-soft-10 text-sm font-semibold"
+    className: "flex mb-6 rounded-xl overflow-hidden border border-soft-10 text-sm font-semibold"
   }, /*#__PURE__*/React.createElement("button", {
-    className: `flex-1 py-2.5 ${mode === "login" ? "bg-gold text-ink" : "text-muted-2"}`,
+    type: "button",
+    className: `flex-1 py-3.5 ${mode === "login" ? "bg-gold text-ink" : "text-muted-2"}`,
     onClick: () => setMode("login")
   }, "Log in"), /*#__PURE__*/React.createElement("button", {
-    className: `flex-1 py-2.5 ${mode === "signup" ? "bg-gold text-ink" : "text-muted-2"}`,
+    type: "button",
+    className: `flex-1 py-3.5 ${mode === "signup" ? "bg-gold text-ink" : "text-muted-2"}`,
     onClick: () => setMode("signup")
   }, "Sign up")), /*#__PURE__*/React.createElement("form", {
     onSubmit: submit,
@@ -1018,10 +1167,10 @@ function AuthScreen() {
     className: inputCls,
     autoComplete: mode === "login" ? "current-password" : "new-password"
   }), error && /*#__PURE__*/React.createElement("p", {
-    className: "text-red text-xs"
+    className: "text-red text-sm"
   }, error), /*#__PURE__*/React.createElement("button", {
     disabled: busy,
-    className: "w-full bg-gold text-ink font-bold py-3 rounded-md disabled-dim-60"
+    className: "btn-primary w-full text-base"
   }, busy ? "…" : mode === "login" ? "Log in" : "Create account"))), /*#__PURE__*/React.createElement("p", {
     className: "text-center text-xs text-muted-5 mt-4"
   }, "Real Firebase accounts — requires Email/Password sign-in enabled in your Firebase project.")));
@@ -1033,6 +1182,7 @@ function AuthScreen() {
 function Dashboard({
   authUser,
   teams,
+  flash,
   onLogout,
   onNewTeam,
   onEditTeam,
@@ -1052,39 +1202,40 @@ function Dashboard({
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement(Flag, {
     className: "text-gold",
-    size: 22
+    size: 24
   }), /*#__PURE__*/React.createElement("span", {
-    className: "font-extrabold uppercase tracking-tight text-lg"
+    className: "font-extrabold uppercase tracking-tight text-xl"
   }, "FlagStat")), /*#__PURE__*/React.createElement("button", {
     onClick: onLogout,
-    className: "text-muted-3 p-2 -mr-2"
+    className: "text-muted-3 hover-text-primary p-2.5 -mr-2 rounded-md"
   }, /*#__PURE__*/React.createElement(LogOut, {
-    size: 18
+    size: 20
   }))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-5 font-mono mb-7"
   }, "Coach view · ", authUser.email), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between mb-3"
+    className: "flex items-center justify-between mb-4"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "text-sm uppercase tracking-widest text-muted-3 font-semibold"
   }, "Your teams"), /*#__PURE__*/React.createElement("button", {
     onClick: onNewTeam,
-    className: "flex items-center gap-1 text-sm font-semibold text-ink bg-primary rounded-md px-3 py-2"
+    className: "btn-primary flex items-center gap-1.5 text-sm"
   }, /*#__PURE__*/React.createElement(Plus, {
-    size: 14
+    size: 16
   }), " New team")), teams.length === 0 && /*#__PURE__*/React.createElement("div", {
-    className: "border border-dashed border-soft-15 rounded-lg p-8 text-center text-muted-3 mb-6"
+    className: "border border-dashed border-soft-15 rounded-xl p-10 text-center text-muted-3 mb-6"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "mb-4"
+    className: "mb-5"
   }, "No teams yet. Create one to set your field size and start tracking games."), /*#__PURE__*/React.createElement("button", {
     onClick: onDemoTeam,
-    className: "inline-flex items-center gap-1.5 text-sm font-semibold text-gold border border-gold-dim rounded-full px-4 py-2"
+    className: "btn-outline-gold inline-flex items-center gap-1.5 text-sm"
   }, /*#__PURE__*/React.createElement(Sparkles, {
-    size: 14
+    size: 16
   }), " Try a demo team")), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-3"
+    className: "space-y-4"
   }, teams.map(t => /*#__PURE__*/React.createElement(TeamCard, {
     key: t.id,
     team: t,
+    flash: flash,
     onOpenRoster: onOpenRoster,
     onSeasonStats: onSeasonStats,
     onEditTeam: onEditTeam,
@@ -1105,6 +1256,7 @@ function Dashboard({
 }
 function TeamCard({
   team,
+  flash,
   onOpenRoster,
   onSeasonStats,
   onEditTeam,
@@ -1117,67 +1269,67 @@ function TeamCard({
     const unsub = gamesCol(team.id).onSnapshot(snap => setGames(snap.docs.map(d => ({
       ...d.data(),
       id: d.id
-    }))));
+    }))), err => flash && flash(describeFirebaseError(err, `load ${team.name}'s games`)));
     return unsub;
   }, [team.id]);
   const rec = computeRecord(games);
   const recentGames = [...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 4);
   return /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg p-4"
+    className: "card-panel p-5"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between mb-2"
+    className: "flex items-center justify-between mb-3"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold"
+    className: "font-bold text-lg"
   }, team.name), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-muted-3 font-mono"
   }, team.fieldLength, " × ", team.fieldWidth, " yd field · ", (team.roster || []).length, " players")), /*#__PURE__*/React.createElement(Shield, {
     className: "text-blue shrink-0",
-    size: 20
+    size: 22
   })), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-4 bg-ink rounded-md px-3 py-2 mb-3 font-mono text-xs"
+    className: "flex items-center gap-4 bg-ink rounded-md px-4 py-3 mb-4 font-mono text-xs"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "font-bold text-gold"
+    className: "font-bold text-gold text-sm"
   }, rec.w, "-", rec.l, rec.t ? `-${rec.t}` : ""), /*#__PURE__*/React.createElement("span", {
     className: "text-muted-4"
   }, rec.played, " played"), /*#__PURE__*/React.createElement("span", {
     className: "text-muted-4 ml-auto"
   }, rec.pf, " PF / ", rec.pa, " PA")), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 sm:flex sm:flex-wrap gap-2 text-xs font-semibold mb-3"
+    className: "grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 text-sm font-semibold mb-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => onOpenRoster(team),
-    className: "flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"
+    className: "btn-outline flex items-center justify-center gap-1.5"
   }, /*#__PURE__*/React.createElement(Users, {
-    size: 12
+    size: 15
   }), " Roster"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onSeasonStats(team),
-    className: "flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"
+    className: "btn-outline flex items-center justify-center gap-1.5"
   }, /*#__PURE__*/React.createElement(TrendingUp, {
-    size: 12
+    size: 15
   }), " Season"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onEditTeam(team),
-    className: "flex items-center justify-center gap-1 border border-soft-15 rounded-md px-2.5 py-2"
+    className: "btn-outline flex items-center justify-center gap-1.5"
   }, /*#__PURE__*/React.createElement(Settings, {
-    size: 12
+    size: 15
   }), " Settings"), /*#__PURE__*/React.createElement("button", {
     onClick: onRequestDelete,
-    className: "flex items-center justify-center gap-1 border border-red-dim text-red rounded-md px-2.5 py-2"
+    className: "btn-outline-red flex items-center justify-center gap-1.5"
   }, /*#__PURE__*/React.createElement(Trash2, {
-    size: 12
+    size: 15
   }), " Delete"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onStartGame(team),
-    className: "col-span-2 sm:col-span-1 flex items-center justify-center gap-1 bg-gold text-ink rounded-md px-2.5 py-2 sm:ml-auto"
+    className: "btn-primary col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 sm:ml-auto"
   }, /*#__PURE__*/React.createElement(Play, {
-    size: 12
+    size: 15
   }), " Start game")), recentGames.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1.5 border-t border-soft-10 pt-3"
+    className: "space-y-2 border-t border-soft-10 pt-4"
   }, recentGames.map(g => /*#__PURE__*/React.createElement("button", {
     key: g.id,
     onClick: () => onOpenGame(team, g),
-    className: "w-full flex items-center justify-between text-xs bg-ink rounded-md px-3 py-2 text-left"
+    className: "w-full flex items-center justify-between text-sm bg-ink rounded-md px-4 py-3 text-left hover-row"
   }, /*#__PURE__*/React.createElement("span", null, "vs ", g.opponent, " ", g.status === "live" && /*#__PURE__*/React.createElement("span", {
     className: "text-red"
   }, "· live")), /*#__PURE__*/React.createElement("span", {
-    className: "font-mono text-muted-2"
+    className: "font-mono text-muted-2 text-xs"
   }, g.date)))));
 }
 function TeamForm({
@@ -1285,13 +1437,13 @@ function TeamForm({
     type: "number",
     className: inputCls
   })), /*#__PURE__*/React.createElement("button", {
-    className: "w-full bg-gold text-ink font-bold py-3.5 rounded-md"
+    className: "btn-primary w-full text-base"
   }, "Save team"), onDelete && /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setConfirmDelete(true),
-    className: "w-full flex items-center justify-center gap-1.5 border border-red-dim text-red font-semibold py-3 rounded-md"
+    className: "btn-outline-red w-full"
   }, /*#__PURE__*/React.createElement(Trash2, {
-    size: 14
+    size: 16
   }), " Delete this team")), confirmDelete && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Delete team?",
     message: `This removes "${team.name}", its roster, and its game history. This can't be undone.`,
@@ -1371,57 +1523,57 @@ function RosterEditor({
     placeholder: "#",
     className: `${inputCls} w-16`
   }), /*#__PURE__*/React.createElement("button", {
-    className: "bg-primary text-ink rounded-md px-4 font-bold"
+    className: "btn-primary px-5"
   }, /*#__PURE__*/React.createElement(Plus, {
-    size: 16
+    size: 18
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2 mb-8"
+    className: "space-y-2.5 mb-8"
   }, roster.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
   }, "No players added yet."), roster.map(p => /*#__PURE__*/React.createElement("div", {
     key: p.id,
-    className: "bg-panel border border-soft-10 rounded-md px-3 py-2"
+    className: "card-panel px-4 py-3"
   }, editingId === p.id ? /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-2"
   }, /*#__PURE__*/React.createElement("input", {
     value: editName,
     onChange: e => setEditName(e.target.value),
-    className: `${inputCls} flex-1 py-1.5`
+    className: `${inputCls} flex-1 py-2`
   }), /*#__PURE__*/React.createElement("input", {
     value: editNumber,
     onChange: e => setEditNumber(e.target.value),
-    className: `${inputCls} w-14 py-1.5`
+    className: `${inputCls} w-16 py-2`
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => saveEdit(p.id),
-    className: "text-green bg-green-dim rounded p-1.5"
+    className: "text-green bg-green-dim rounded-lg p-2.5"
   }, /*#__PURE__*/React.createElement(Check, {
-    size: 16
+    size: 18
   })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setEditingId(null),
-    className: "text-muted-3 p-1.5"
+    className: "text-muted-3 p-2.5"
   }, /*#__PURE__*/React.createElement(X, {
-    size: 16
+    size: 18
   }))) : /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "font-mono text-sm text-muted-2 w-8"
+    className: "font-mono text-sm text-muted-2 w-9"
   }, p.number || "–"), /*#__PURE__*/React.createElement("span", {
-    className: "flex-1 font-medium"
+    className: "flex-1 font-medium text-base"
   }, p.name), /*#__PURE__*/React.createElement("button", {
     onClick: () => startEdit(p),
-    className: "text-blue p-1.5"
+    className: "text-blue p-2.5"
   }, /*#__PURE__*/React.createElement(Pencil, {
-    size: 15
+    size: 17
   })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setConfirmRemove(p),
-    className: "text-red p-1.5"
+    className: "text-red p-2.5"
   }, /*#__PURE__*/React.createElement(Trash2, {
-    size: 15
+    size: 17
   })))))), /*#__PURE__*/React.createElement("button", {
     onClick: onStartGame,
-    className: "w-full bg-gold text-ink font-bold py-3.5 rounded-md flex items-center justify-center gap-2"
+    className: "btn-primary w-full text-base"
   }, /*#__PURE__*/React.createElement(Play, {
-    size: 16
+    size: 18
   }), " Start a game"), confirmRemove && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Remove player?",
     message: `Remove ${confirmRemove.name} from the roster? Past game stats already logged for them are kept.`,
@@ -1465,7 +1617,9 @@ function GameSetup({
   }, /*#__PURE__*/React.createElement(BackHeader, {
     title: "New game",
     onBack: onCancel
-  }), /*#__PURE__*/React.createElement(Field, {
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-6"
+  }, /*#__PURE__*/React.createElement(Field, {
     label: "Opponent"
   }, /*#__PURE__*/React.createElement("input", {
     value: opponent,
@@ -1473,9 +1627,9 @@ function GameSetup({
     className: inputCls,
     placeholder: "Opponent team name"
   })), /*#__PURE__*/React.createElement(Field, {
-    label: "Who receives first?"
+    label: "Who starts with the ball?"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2"
+    className: "grid grid-cols-2 gap-2.5"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: possession === "us",
     onClick: () => setPossession("us")
@@ -1485,17 +1639,19 @@ function GameSetup({
   }, "Opponent"))), /*#__PURE__*/React.createElement(Field, {
     label: "Players present today"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2"
+    className: "grid grid-cols-2 gap-2.5"
   }, team.roster.map(p => /*#__PURE__*/React.createElement(Chip, {
     key: p.id,
     active: presentIds.includes(p.id),
     onClick: () => togglePresent(p.id)
   }, p.number ? `#${p.number} ` : "", p.name))), team.roster.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
-  }, "Add players to the roster first — you can still start without them.")), /*#__PURE__*/React.createElement("button", {
+  }, "Add players to the roster first — you can still start without them."))), /*#__PURE__*/React.createElement("button", {
     onClick: start,
-    className: "w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-4"
-  }, "Kickoff"));
+    className: "btn-primary w-full text-base mt-6"
+  }, "Start game"), /*#__PURE__*/React.createElement("p", {
+    className: "text-center text-xs text-muted-5 mt-3"
+  }, "No kickoff — the receiving team starts at their own 14."));
 }
 
 // ============================================================
@@ -1574,29 +1730,29 @@ function LiveGame({
   const scoreboard = /*#__PURE__*/React.createElement("div", {
     className: "sticky top-0 z-20 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-2 pb-3 bg-ink"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg p-4"
+    className: "card-panel p-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between items-center mb-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "text-center flex-1"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-3 truncate"
+    className: "text-xs uppercase tracking-widest text-muted-3 truncate font-semibold"
   }, settings.name), /*#__PURE__*/React.createElement("p", {
-    className: "font-mono text-3xl font-bold"
+    className: "font-mono text-4xl font-bold"
   }, derived.score.us)), /*#__PURE__*/React.createElement("div", {
-    className: "text-muted-5 font-mono text-xs px-2"
+    className: "text-muted-5 font-mono text-xs px-2 bg-ink rounded-md py-1.5"
   }, "Q", derived.quarter), /*#__PURE__*/React.createElement("div", {
     className: "text-center flex-1"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-3 truncate"
+    className: "text-xs uppercase tracking-widest text-muted-3 truncate font-semibold"
   }, game.opponent), /*#__PURE__*/React.createElement("p", {
-    className: "font-mono text-3xl font-bold"
+    className: "font-mono text-4xl font-bold"
   }, derived.score.them))), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between font-mono text-xs text-muted-2 border-t border-soft-10 pt-3"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "flex items-center gap-1"
+    className: "flex items-center gap-1.5"
   }, /*#__PURE__*/React.createElement(CircleDot, {
-    size: 11,
+    size: 12,
     className: derived.possession === "us" ? "text-gold" : "text-blue"
   }), " ", derived.possession === "us" ? settings.name : game.opponent, " ball"), /*#__PURE__*/React.createElement("span", null, "Down ", derived.down, "/", settings.numDowns), /*#__PURE__*/React.createElement("span", null, derived.ballOn, " yd line")), /*#__PURE__*/React.createElement(FieldVisual, {
     length: settings.fieldLength,
@@ -1614,24 +1770,24 @@ function LiveGame({
       title: "Extra point",
       onBack: onExit
     })), scoreboard, /*#__PURE__*/React.createElement("div", {
-      className: "bg-panel border border-soft-10 rounded-lg p-6 text-center mt-4"
+      className: "card-panel p-6 text-center mt-4"
     }, /*#__PURE__*/React.createElement("p", {
-      className: "mb-4 font-semibold"
+      className: "mb-4 font-semibold text-base"
     }, "Touchdown! Choose the try for ", derived.pendingPAT === "us" ? settings.name : game.opponent, ":"), /*#__PURE__*/React.createElement("div", {
-      className: "grid grid-cols-2 gap-2"
+      className: "grid grid-cols-2 gap-2.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(true, false),
-      className: "bg-green rounded-md py-4 font-semibold"
-    }, "1pt (from 5) Good"), /*#__PURE__*/React.createElement("button", {
+      className: "bg-green rounded-xl py-5 font-bold shadow active-dim-90"
+    }, "1pt (from 5)", /*#__PURE__*/React.createElement("br", null), "Good"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(false, false),
-      className: "bg-red-dim rounded-md py-4 font-semibold"
-    }, "1pt (from 5) No Good"), /*#__PURE__*/React.createElement("button", {
+      className: "bg-red-dim rounded-xl py-5 font-bold shadow active-dim-90"
+    }, "1pt (from 5)", /*#__PURE__*/React.createElement("br", null), "No Good"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(true, true),
-      className: "bg-green rounded-md py-4 font-semibold"
-    }, "2pt (from 10) Good"), /*#__PURE__*/React.createElement("button", {
+      className: "bg-green rounded-xl py-5 font-bold shadow active-dim-90"
+    }, "2pt (from 10)", /*#__PURE__*/React.createElement("br", null), "Good"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(false, true),
-      className: "bg-red-dim rounded-md py-4 font-semibold"
-    }, "2pt (from 10) No Good"))));
+      className: "bg-red-dim rounded-xl py-5 font-bold shadow active-dim-90"
+    }, "2pt (from 10)", /*#__PURE__*/React.createElement("br", null), "No Good"))));
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-lg mx-auto px-4 sm:px-5 pb-24"
@@ -1641,45 +1797,45 @@ function LiveGame({
     title: `${settings.name} vs ${game.opponent}`,
     onBack: onExit
   })), scoreboard, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-4 mt-4"
+    className: "grid grid-cols-3 gap-2.5 mb-5 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => handleInstant("possession_change"),
-    className: "flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5"
+    className: "btn-outline flex-col gap-1.5 text-xs py-3.5"
   }, /*#__PURE__*/React.createElement(ArrowLeftRight, {
-    size: 14
+    size: 18
   }), " Change ball"), /*#__PURE__*/React.createElement("button", {
     onClick: () => handleInstant("quarter_end"),
-    className: "flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5"
+    className: "btn-outline flex-col gap-1.5 text-xs py-3.5"
   }, /*#__PURE__*/React.createElement(SkipForward, {
-    size: 14
+    size: 18
   }), " End quarter"), /*#__PURE__*/React.createElement("button", {
     onClick: undoLast,
     disabled: game.plays.length === 0,
-    className: "flex flex-col items-center justify-center gap-1 text-xs font-semibold border border-soft-15 rounded-md py-2.5 disabled-dim-30"
+    className: "btn-outline flex-col gap-1.5 text-xs py-3.5 disabled-dim-30"
   }, /*#__PURE__*/React.createElement(RotateCcw, {
-    size: 14
+    size: 18
   }), " Undo last")), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2.5 font-semibold"
   }, "Log a play"), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2 mb-4"
+    className: "grid grid-cols-2 gap-2.5 mb-5"
   }, PLAY_TYPES.map(pt => /*#__PURE__*/React.createElement("button", {
     key: pt.id,
     onClick: () => pt.modal ? setDraft({
       type: pt.id
     }) : handleInstant(pt.id),
-    className: `${pt.color} rounded-md py-3.5 font-bold text-sm shadow active-dim-90`
+    className: `${pt.color} rounded-xl py-5 font-bold text-base shadow-lg active-dim-90`
   }, pt.label))), /*#__PURE__*/React.createElement("button", {
     onClick: () => onEnd(game),
-    className: "w-full border border-red text-red font-bold py-3.5 rounded-md mb-3"
+    className: "btn-outline-red w-full text-base mb-3"
   }, "End game"), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between mt-6 mb-2"
+    className: "flex items-center justify-between mt-6 mb-2.5"
   }, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 font-semibold"
   }, "Play-by-play (", game.plays.length, ")"), game.plays.length > 10 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowFullLog(v => !v),
-    className: "text-xs text-blue font-semibold"
+    className: "text-sm text-blue font-semibold"
   }, showFullLog ? "Show recent" : "Show all")), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1.5"
+    className: "space-y-2"
   }, shownPlays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
     key: p.id,
     play: p,
@@ -1748,19 +1904,19 @@ function PlayLogRow({
   const teamName = play.possession === "us" || !play.possession && ["quarter_end"].includes(play.type) ? team.name : play.possession === "them" ? opponent : null;
   const label = PLAY_LABELS[play.type] || play.type;
   return /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between text-xs bg-panel border border-soft-5 rounded-md px-3 py-2.5"
+    className: "flex items-center justify-between text-sm bg-panel border border-soft-5 rounded-lg px-4 py-3"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-muted-4 font-mono w-8 shrink-0"
+    className: "text-muted-4 font-mono w-9 shrink-0 text-xs"
   }, "Q", play.quarter || 1), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
   }, label, play.playerId && player ? ` · ${player.name}` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : ""), play.type === "touchdown" && /*#__PURE__*/React.createElement(Award, {
-    size: 13,
+    size: 15,
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
     onClick: onDelete,
-    className: "text-muted-5 hover-text-red p-1 shrink-0"
+    className: "text-muted-5 hover-text-red p-2 -mr-1 shrink-0"
   }, /*#__PURE__*/React.createElement(X, {
-    size: 14
+    size: 16
   })));
 }
 function PlayFormModal({
@@ -1776,21 +1932,20 @@ function PlayFormModal({
   return /*#__PURE__*/React.createElement("div", {
     className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border-t sm:border border-soft-10 rounded-t-2xl sm:rounded-lg w-full max-w-sm p-5 pb-8 sm:pb-5"
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center justify-between mb-4"
+    className: "flex items-center justify-between mb-5"
   }, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold text-lg"
+    className: "font-bold text-xl"
   }, meta.label), /*#__PURE__*/React.createElement("button", {
     onClick: onCancel,
-    className: "p-1"
+    className: "p-2 -mr-2 text-muted-3"
   }, /*#__PURE__*/React.createElement(X, {
-    size: 18,
-    className: "text-muted-3"
+    size: 20
   }))), meta.needsOn && /*#__PURE__*/React.createElement(Field, {
     label: "Penalty on"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2"
+    className: "grid grid-cols-2 gap-2.5"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: on === "them",
     onClick: () => setOn("them")
@@ -1824,9 +1979,9 @@ function PlayFormModal({
       playerId,
       on
     }),
-    className: "w-full bg-gold text-ink font-bold py-3.5 rounded-md mt-2 flex items-center justify-center gap-2"
+    className: "btn-primary w-full text-base mt-3"
   }, /*#__PURE__*/React.createElement(Check, {
-    size: 16
+    size: 18
   }), " Log play")));
 }
 
@@ -1863,13 +2018,13 @@ function GameSummary({
     title: "Final",
     onBack: onBack
   }), /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg p-6 text-center mb-4"
+    className: "card-panel p-7 text-center mb-5"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Final score"), /*#__PURE__*/React.createElement("p", {
-    className: "font-mono text-4xl font-bold mb-1"
+    className: "font-mono text-5xl font-bold mb-1"
   }, derived.score.us, " – ", derived.score.them), editingMeta ? /*#__PURE__*/React.createElement("div", {
-    className: "mt-4 space-y-2 text-left"
+    className: "mt-4 space-y-2.5 text-left"
   }, /*#__PURE__*/React.createElement("input", {
     value: opponent,
     onChange: e => setOpponent(e.target.value),
@@ -1881,7 +2036,7 @@ function GameSummary({
     onChange: e => setDate(e.target.value),
     className: inputCls
   }), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-2"
+    className: "flex gap-2.5"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       onEditMeta(game, {
@@ -1890,67 +2045,67 @@ function GameSummary({
       });
       setEditingMeta(false);
     },
-    className: "flex-1 bg-gold text-ink font-bold py-2 rounded-md"
+    className: "btn-primary flex-1"
   }, "Save"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setEditingMeta(false),
-    className: "flex-1 border border-soft-15 rounded-md py-2"
+    className: "btn-outline flex-1"
   }, "Cancel"))) : /*#__PURE__*/React.createElement("button", {
     onClick: () => setEditingMeta(true),
-    className: "text-sm text-muted-3 flex items-center gap-1 mx-auto mt-1"
+    className: "text-sm text-muted-3 flex items-center gap-1.5 mx-auto mt-2 py-1"
   }, "vs ", game.opponent, " · ", game.date, " ", /*#__PURE__*/React.createElement(Pencil, {
-    size: 11
+    size: 13
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-2 mb-6"
+    className: "flex gap-2.5 mb-6"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => onReopen(game),
-    className: "flex-1 flex items-center justify-center gap-1.5 border border-soft-15 text-xs font-semibold rounded-md py-2.5"
+    className: "btn-outline flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(RefreshCcw, {
-    size: 13
+    size: 15
   }), " Reopen game"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setConfirmDelete(true),
-    className: "flex-1 flex items-center justify-center gap-1.5 border border-red-dim text-red text-xs font-semibold rounded-md py-2.5"
+    className: "btn-outline-red flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Trash2, {
-    size: 13
+    size: 15
   }), " Delete game")), Object.keys(stats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Player stats"), /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg overflow-hidden mb-6 overflow-x-auto"
+    className: "card-panel overflow-hidden mb-6 overflow-x-auto"
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-sm"
   }, /*#__PURE__*/React.createElement("thead", {
     className: "bg-overlay-5 text-muted-3 text-xs uppercase"
   }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-    className: "text-left px-3 py-2"
+    className: "text-left px-4 py-3"
   }, "Player"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "Touches"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "Yards"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "TDs"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, Object.entries(stats).map(([pid, s]) => {
     var _rosterById$pid;
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 font-medium"
+      className: "px-4 py-3 font-medium"
     }, ((_rosterById$pid = rosterById[pid]) === null || _rosterById$pid === void 0 ? void 0 : _rosterById$pid.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.touches), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.yards), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.tds), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
   }))))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Full play-by-play"), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-muted-5 mb-2"
+    className: "text-xs text-muted-5 mb-2.5"
   }, "Spot a mistake? Remove a play below — the score and stats recalculate automatically."), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-1.5"
+    className: "space-y-2"
   }, game.plays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
     key: p.id,
     play: p,
@@ -1987,7 +2142,8 @@ function GameSummary({
 // ============================================================
 function SeasonStats({
   team,
-  onBack
+  onBack,
+  flash
 }) {
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState([]);
@@ -1998,6 +2154,9 @@ function SeasonStats({
         id: d.id
       })));
       setLoading(false);
+    }, err => {
+      setLoading(false);
+      flash && flash(describeFirebaseError(err, "load season stats"));
     });
     return unsub;
   }, [team.id]);
@@ -2048,7 +2207,7 @@ function SeasonStats({
     title: `${team.name} · Season`,
     onBack: onBack
   }), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-6"
+    className: "grid grid-cols-3 gap-2.5 mb-6"
   }, /*#__PURE__*/React.createElement(StatBlock, {
     label: "Record",
     value: `${record.w}-${record.l}${record.t ? `-${record.t}` : ""}`
@@ -2060,33 +2219,33 @@ function SeasonStats({
     value: record.pa
   })), sortedIds.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: exportCSV,
-    className: "w-full flex items-center justify-center gap-1.5 border border-soft-15 text-sm font-semibold rounded-md py-2.5 mb-6"
+    className: "btn-outline w-full text-sm mb-6"
   }, /*#__PURE__*/React.createElement(Download, {
-    size: 14
+    size: 16
   }), " Export season CSV"), loading && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-6"
   }, "Loading season…"), !loading && sortedIds.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Season stat leaders"), /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg overflow-hidden mb-8 overflow-x-auto"
+    className: "card-panel overflow-hidden mb-8 overflow-x-auto"
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-sm"
   }, /*#__PURE__*/React.createElement("thead", {
     className: "bg-overlay-5 text-muted-3 text-xs uppercase"
   }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-    className: "text-left px-3 py-2"
+    className: "text-left px-4 py-3"
   }, "Player"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "GP"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "Touches"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "Yards"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "YPT"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "TDs"), /*#__PURE__*/React.createElement("th", {
-    className: "text-right px-3 py-2"
+    className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, sortedIds.map(pid => {
     var _rosterById$pid3;
     const s = playerTotals[pid];
@@ -2095,19 +2254,19 @@ function SeasonStats({
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 font-medium"
+      className: "px-4 py-3 font-medium"
     }, ((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.touches), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.yards), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, ypt), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.tds), /*#__PURE__*/React.createElement("td", {
-      className: "px-3 py-2 text-right font-mono"
+      className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
   }))))), !loading && sortedIds.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-8"
@@ -2120,15 +2279,15 @@ function SeasonStats({
     const win = g.status === "final" ? s.us > s.them ? "W" : s.us < s.them ? "L" : "T" : null;
     return /*#__PURE__*/React.createElement("div", {
       key: g.id,
-      className: "flex items-center justify-between bg-panel border border-soft-10 rounded-lg px-4 py-2.5"
+      className: "card-panel flex items-center justify-between px-4 py-3.5"
     }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
       className: "font-semibold text-sm"
     }, "vs ", g.opponent), /*#__PURE__*/React.createElement("p", {
       className: "text-xs text-muted-4"
     }, g.date)), /*#__PURE__*/React.createElement("div", {
-      className: "flex items-center gap-2 font-mono text-sm"
+      className: "flex items-center gap-2.5 font-mono text-sm"
     }, win && /*#__PURE__*/React.createElement("span", {
-      className: `w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${win === "W" ? "bg-green" : win === "L" ? "bg-red" : "bg-blue"}`
+      className: `w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${win === "W" ? "bg-green" : win === "L" ? "bg-red" : "bg-blue"}`
     }, win), /*#__PURE__*/React.createElement("span", null, g.status === "final" ? `${s.us}–${s.them}` : "live")));
   })));
 }
@@ -2137,11 +2296,11 @@ function StatBlock({
   value
 }) {
   return /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border border-soft-10 rounded-lg p-3 text-center"
+    className: "card-panel p-4 text-center"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-1"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-1.5"
   }, label), /*#__PURE__*/React.createElement("p", {
-    className: "font-mono text-xl font-bold"
+    className: "font-mono text-2xl font-bold"
   }, value));
 }
 
@@ -2153,14 +2312,14 @@ function BackHeader({
   onBack
 }) {
   return /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-2 mb-6"
+    className: "flex items-center gap-2.5 mb-6"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onBack,
-    className: "text-muted-3 hover-text-primary p-1 -ml-1"
+    className: "text-muted-3 hover-text-primary p-2 -ml-2 rounded-md"
   }, /*#__PURE__*/React.createElement(ChevronLeft, {
-    size: 22
+    size: 24
   })), /*#__PURE__*/React.createElement("h1", {
-    className: "font-extrabold text-lg tracking-tight"
+    className: "font-extrabold text-xl tracking-tight"
   }, title));
 }
 function Field({
@@ -2170,7 +2329,7 @@ function Field({
   return /*#__PURE__*/React.createElement("div", {
     className: "mb-0"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-wide text-muted-3 mb-1.5 font-semibold"
+    className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
   }, label), children);
 }
 function Chip({
@@ -2181,7 +2340,11 @@ function Chip({
   return /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: onClick,
-    className: `rounded-md py-2.5 text-sm font-semibold border ${active ? "bg-gold text-ink border-gold" : "border-soft-15 text-muted-1"}`
+    className: `rounded-xl py-3.5 text-sm font-semibold ${active ? "bg-gold text-ink border-gold" : "border-soft-15 text-muted-1"}`,
+    style: {
+      borderWidth: "1.5px",
+      borderStyle: "solid"
+    }
   }, children);
 }
 function ConfirmDialog({
@@ -2195,24 +2358,24 @@ function ConfirmDialog({
   return /*#__PURE__*/React.createElement("div", {
     className: "fixed inset-0 bg-scrim-70 flex items-end sm:items-center justify-center z-50 px-0 sm:px-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "bg-panel border-t sm:border border-soft-10 rounded-t-2xl sm:rounded-lg w-full max-w-sm p-5 pb-8 sm:pb-5"
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-start gap-3 mb-4"
+    className: "flex items-start gap-3 mb-5"
   }, /*#__PURE__*/React.createElement(AlertTriangle, {
-    size: 20,
+    size: 22,
     className: "text-red shrink-0 mt-0.5"
   }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
-    className: "font-bold mb-1"
+    className: "font-bold text-lg mb-1"
   }, title), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-muted-2"
   }, message))), /*#__PURE__*/React.createElement("div", {
-    className: "flex gap-2"
+    className: "flex gap-2.5"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onCancel,
-    className: "flex-1 border border-soft-15 rounded-md py-3 font-semibold"
+    className: "btn-outline flex-1 text-base"
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
     onClick: onConfirm,
-    className: `flex-1 rounded-md py-3 font-bold ${danger ? "bg-red text-white" : "bg-gold text-ink"}`
+    className: `flex-1 text-base ${danger ? "btn-danger" : "btn-primary"}`
   }, confirmLabel))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(FlagStatApp, null));
