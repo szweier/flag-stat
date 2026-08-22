@@ -876,6 +876,40 @@ table { border-collapse: collapse; }
   .sm\:-mx-5 { margin-left: -1.25rem; margin-right: -1.25rem; }
 }
 
+/* ============================================================
+   Print / PDF export — native browser print, no external library.
+   Every modern browser's print dialog offers "Save as PDF" as a
+   destination, so this is the export mechanism: hide the app chrome,
+   force dark-on-light colors (screens print white by default unless
+   "background graphics" is on, which most people leave off, so our
+   normal light-text-on-dark-background styling would be invisible on
+   paper if left alone), and show a clean print-only header.
+   ============================================================ */
+.print-only { display: none; }
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  html, body { background: #ffffff !important; }
+  body, .bg-ink, .card-panel, .bg-panel {
+    background: #ffffff !important;
+    color: #14171F !important;
+    box-shadow: none !important;
+  }
+  .card-panel, table, th, td {
+    border-color: #cccccc !important;
+  }
+  * {
+    color: #14171F !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  thead { background: #eeeeee !important; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #cccccc !important; }
+  tr { break-inside: avoid; }
+  .print-page-break { break-before: page; }
+}
+
   .bg-ink { background-color: #14171F; }
   .text-ink { color: #14171F; }
   .bg-panel { background-color: #1B1F2A; }
@@ -1952,8 +1986,12 @@ function LiveGame({
       if (!stateAfterFirst.pendingPAT) {
         playsToAdd.push({
           type: "fumble",
-          playerId: entry.playerId || null,
-          // the same player who had the ball when it came loose
+          // If our defense recovered it, the coach names them explicitly
+          // (there's no "original ball carrier" to reuse in that case,
+          // since we don't track the opponent's roster at all). Otherwise
+          // fall back to the same player who had the ball when it popped
+          // loose — the common case of our own guy fumbling it away.
+          playerId: payload.fumbleRecoveredBy || entry.playerId || null,
           yards: payload.fumbleReturnYards || 0
         });
       }
@@ -2112,6 +2150,7 @@ function LiveGame({
     draft: draft,
     roster: roster,
     currentQBId: derived.currentQBId,
+    possession: derived.possession,
     onCancel: () => setDraft(null),
     onConfirm: handleConfirm
   }), qbPickerOpen && /*#__PURE__*/React.createElement(QBPickerModal, {
@@ -2219,7 +2258,7 @@ function PlayLogRow({
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
     onClick: onDelete,
-    className: "text-muted-5 hover-text-red p-2 -mr-1 shrink-0"
+    className: "text-muted-5 hover-text-red p-2 -mr-1 shrink-0 no-print"
   }, /*#__PURE__*/React.createElement(X, {
     size: 16
   })));
@@ -2228,9 +2267,11 @@ function PlayFormModal({
   draft,
   roster,
   currentQBId,
+  possession,
   onCancel,
   onConfirm
 }) {
+  const isOurBall = possession === "us";
   const [yards, setYards] = useState("");
   const [airYards, setAirYards] = useState("");
   const [isLoss, setIsLoss] = useState(false);
@@ -2239,19 +2280,45 @@ function PlayFormModal({
   const [on, setOn] = useState("them");
   const [fumbledAfter, setFumbledAfter] = useState(false);
   const [fumbleReturnYards, setFumbleReturnYards] = useState("");
-  const meta = PLAY_TYPES.find(t => t.id === draft.type);
-  const showPasser = meta.needsPasser;
+  const [fumbleRecoveredBy, setFumbleRecoveredBy] = useState("");
+  const baseMeta = PLAY_TYPES.find(t => t.id === draft.type);
+
+  // We only track our own roster, so player attribution only makes sense
+  // for our team's actual involvement: our offense when we have the ball,
+  // or our defense making a takeaway (interception / fumble recovery) when
+  // the other team has it. Everything else the opponent does — their run,
+  // their pass, their sack — is just yards, no player.
+  let needsPlayer = baseMeta.needsPlayer;
+  let needsPasser = baseMeta.needsPasser;
+  let playerLabel = baseMeta.playerLabel;
+  if (draft.type === "interception") {
+    needsPlayer = !isOurBall; // it's ours to name only when THEY threw it and we picked it
+    needsPasser = isOurBall; // our QB only matters when WE threw it
+  } else if (draft.type === "fumble") {
+    playerLabel = isOurBall ? "Who fumbled" : "Who recovered it";
+  } else if (["run", "pass_complete", "pass_incomplete", "sack"].includes(draft.type) && !isOurBall) {
+    needsPlayer = false;
+    needsPasser = false;
+  }
+
+  // For a chained fumble (the "fumbled after this play?" toggle): figure
+  // out who actually ends up with the ball afterward, so we only ask for
+  // a recovering player when it's genuinely one of ours.
+  const possessorBeforeChainedFumble = draft.type === "interception" ? isOurBall ? "them" : "us" : possession;
+  const possessorAfterChainedFumble = possessorBeforeChainedFumble === "us" ? "them" : "us";
+  const chainNeedsRecoverer = possessorAfterChainedFumble === "us";
   function confirm() {
     const magnitude = Math.abs(Number(yards)) || 0;
-    const finalYards = meta.signable && isLoss ? -magnitude : magnitude;
+    const finalYards = baseMeta.signable && isLoss ? -magnitude : magnitude;
     onConfirm({
       yards: finalYards,
-      airYards: meta.needsAirYards ? Math.abs(Number(airYards)) || 0 : undefined,
-      playerId,
-      passerId: showPasser ? passerId : "",
+      airYards: baseMeta.needsAirYards ? Math.abs(Number(airYards)) || 0 : undefined,
+      playerId: needsPlayer ? playerId : "",
+      passerId: needsPasser ? passerId : "",
       on,
-      fumbledAfter: meta.fumbleToggle ? fumbledAfter : false,
-      fumbleReturnYards: Math.abs(Number(fumbleReturnYards)) || 0
+      fumbledAfter: baseMeta.fumbleToggle ? fumbledAfter : false,
+      fumbleReturnYards: Math.abs(Number(fumbleReturnYards)) || 0,
+      fumbleRecoveredBy: chainNeedsRecoverer ? fumbleRecoveredBy : ""
     });
   }
   return /*#__PURE__*/React.createElement("div", {
@@ -2262,12 +2329,12 @@ function PlayFormModal({
     className: "flex items-center justify-between mb-5"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-bold text-xl"
-  }, meta.label), /*#__PURE__*/React.createElement("button", {
+  }, baseMeta.label, !needsPlayer && !needsPasser && !isOurBall ? " (opponent's play)" : ""), /*#__PURE__*/React.createElement("button", {
     onClick: onCancel,
     className: "p-2 -mr-2 text-muted-3"
   }, /*#__PURE__*/React.createElement(X, {
     size: 20
-  }))), meta.needsOn && /*#__PURE__*/React.createElement(Field, {
+  }))), baseMeta.needsOn && /*#__PURE__*/React.createElement(Field, {
     label: "Penalty on"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5"
@@ -2277,8 +2344,8 @@ function PlayFormModal({
   }, "Opponent"), /*#__PURE__*/React.createElement(Chip, {
     active: on === "us",
     onClick: () => setOn("us")
-  }, "Us"))), meta.needsAirYards && /*#__PURE__*/React.createElement(Field, {
-    label: meta.airYardsLabel
+  }, "Us"))), baseMeta.needsAirYards && /*#__PURE__*/React.createElement(Field, {
+    label: baseMeta.airYardsLabel
   }, /*#__PURE__*/React.createElement("input", {
     type: "number",
     inputMode: "numeric",
@@ -2289,8 +2356,8 @@ function PlayFormModal({
     placeholder: "0"
   }), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-muted-4 mt-1.5"
-  }, "How far downfield the pass was thrown before it was picked off — 0 if it was tipped or picked right at the line.")), meta.needsYards && /*#__PURE__*/React.createElement(Field, {
-    label: meta.yardsLabel
+  }, "How far downfield the pass was thrown before it was picked off — 0 if it was tipped or picked right at the line.")), baseMeta.needsYards && /*#__PURE__*/React.createElement(Field, {
+    label: baseMeta.yardsLabel
   }, /*#__PURE__*/React.createElement("input", {
     autoFocus: true,
     type: "number",
@@ -2300,7 +2367,7 @@ function PlayFormModal({
     onChange: e => setYards(e.target.value),
     className: inputCls,
     placeholder: "0"
-  }), meta.signable && /*#__PURE__*/React.createElement("div", {
+  }), baseMeta.signable && /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5 mt-2.5"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: !isLoss,
@@ -2308,8 +2375,8 @@ function PlayFormModal({
   }, "Gain"), /*#__PURE__*/React.createElement(Chip, {
     active: isLoss,
     onClick: () => setIsLoss(true)
-  }, "Loss"))), showPasser && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
-    label: meta.passerLabel || "Quarterback"
+  }, "Loss"))), needsPasser && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
+    label: baseMeta.passerLabel || "Quarterback"
   }, /*#__PURE__*/React.createElement("select", {
     value: passerId,
     onChange: e => setPasserId(e.target.value),
@@ -2319,8 +2386,8 @@ function PlayFormModal({
   }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.number ? `#${p.number} ` : "", p.name)))), meta.needsPlayer && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
-    label: meta.playerLabel || "Player"
+  }, p.number ? `#${p.number} ` : "", p.name)))), needsPlayer && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
+    label: playerLabel || "Player"
   }, /*#__PURE__*/React.createElement("select", {
     value: playerId,
     onChange: e => setPlayerId(e.target.value),
@@ -2330,8 +2397,8 @@ function PlayFormModal({
   }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.number ? `#${p.number} ` : "", p.name)))), meta.fumbleToggle && /*#__PURE__*/React.createElement(Field, {
-    label: meta.fumbleToggle
+  }, p.number ? `#${p.number} ` : "", p.name)))), baseMeta.fumbleToggle && /*#__PURE__*/React.createElement(Field, {
+    label: baseMeta.fumbleToggle
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5"
   }, /*#__PURE__*/React.createElement(Chip, {
@@ -2344,7 +2411,7 @@ function PlayFormModal({
     className: "mt-2.5"
   }, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
-  }, "Their return yards (from the fumble spot)"), /*#__PURE__*/React.createElement("input", {
+  }, possessorAfterChainedFumble === "us" ? "Our return yards" : "Their return yards", " (from the fumble spot)"), /*#__PURE__*/React.createElement("input", {
     type: "number",
     inputMode: "numeric",
     min: "0",
@@ -2352,7 +2419,20 @@ function PlayFormModal({
     onChange: e => setFumbleReturnYards(e.target.value),
     className: inputCls,
     placeholder: "0"
-  }))), /*#__PURE__*/React.createElement("button", {
+  }), chainNeedsRecoverer && roster.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-2.5"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
+  }, "Recovered by"), /*#__PURE__*/React.createElement("select", {
+    value: fumbleRecoveredBy,
+    onChange: e => setFumbleRecoveredBy(e.target.value),
+    className: inputCls
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.number ? `#${p.number} ` : "", p.name)))))), /*#__PURE__*/React.createElement("button", {
     onClick: confirm,
     className: "btn-primary w-full text-base mt-3"
   }, /*#__PURE__*/React.createElement(Check, {
@@ -2377,6 +2457,13 @@ function GameSummary({
   const stats = useMemo(() => computePlayerStats(game), [game]);
   const qbStats = useMemo(() => computeQBStats(game), [game]);
   const rosterById = Object.fromEntries((settings.roster || []).map(p => [p.id, p]));
+  const presentRoster = (settings.roster || []).filter(p => (game.presentIds || []).includes(p.id));
+  const fullPlayerRows = [...presentRoster].sort((a, b) => {
+    var _stats$a$id, _stats$b$id;
+    const ay = ((_stats$a$id = stats[a.id]) === null || _stats$a$id === void 0 ? void 0 : _stats$a$id.yards) || 0,
+      by = ((_stats$b$id = stats[b.id]) === null || _stats$b$id === void 0 ? void 0 : _stats$b$id.yards) || 0;
+    return by - ay;
+  });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
   const [editingMeta, setEditingMeta] = useState(false);
@@ -2391,17 +2478,25 @@ function GameSummary({
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "no-print"
   }, /*#__PURE__*/React.createElement(BackHeader, {
     title: "Final",
     onBack: onBack
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "print-only mb-6"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "font-extrabold text-2xl"
+  }, settings.name, " vs ", game.opponent), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm"
+  }, game.date, " · Final: ", settings.name, " ", derived.score.us, " – ", derived.score.them, " ", game.opponent)), /*#__PURE__*/React.createElement("div", {
     className: "card-panel p-7 text-center mb-5"
   }, /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold no-print"
   }, "Final score"), /*#__PURE__*/React.createElement("p", {
     className: "font-mono text-5xl font-bold mb-1"
   }, derived.score.us, " – ", derived.score.them), editingMeta ? /*#__PURE__*/React.createElement("div", {
-    className: "mt-4 space-y-2.5 text-left"
+    className: "mt-4 space-y-2.5 text-left no-print"
   }, /*#__PURE__*/React.createElement("input", {
     value: opponent,
     onChange: e => setOpponent(e.target.value),
@@ -2428,11 +2523,11 @@ function GameSummary({
     className: "btn-outline flex-1"
   }, "Cancel"))) : /*#__PURE__*/React.createElement("button", {
     onClick: () => setEditingMeta(true),
-    className: "text-sm text-muted-3 flex items-center space-x-1.5 mx-auto mt-2 py-1"
+    className: "text-sm text-muted-3 flex items-center space-x-1.5 mx-auto mt-2 py-1 no-print"
   }, "vs ", game.opponent, " · ", game.date, " ", /*#__PURE__*/React.createElement(Pencil, {
     size: 13
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "flex space-x-2.5 mb-6"
+    className: "flex space-x-2.5 mb-6 no-print"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => onReopen(game),
     className: "btn-outline flex-1 text-sm"
@@ -2443,7 +2538,12 @@ function GameSummary({
     className: "btn-outline-red flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 15
-  }), " Delete game")), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }), " Delete game")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.print(),
+    className: "btn-outline w-full text-sm mb-6 no-print"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 15
+  }), " Export / print stat sheet (PDF)"), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Passing"), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-6 overflow-x-auto"
@@ -2481,9 +2581,11 @@ function GameSummary({
     }, s.ints), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.sacks));
-  }))))), Object.keys(stats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }))))), fullPlayerRows.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
-  }, "Rushing & receiving"), /*#__PURE__*/React.createElement("div", {
+  }, "Player stats"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-muted-5 mb-2.5 no-print"
+  }, "Every player marked present for this game, including anyone with zero touches."), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-6 overflow-x-auto"
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-sm"
@@ -2499,14 +2601,19 @@ function GameSummary({
     className: "text-right px-4 py-3"
   }, "TDs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, Object.entries(stats).map(([pid, s]) => {
-    var _rosterById$pid2;
+  }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, fullPlayerRows.map(p => {
+    const s = stats[p.id] || {
+      touches: 0,
+      yards: 0,
+      tds: 0,
+      turnovers: 0
+    };
     return /*#__PURE__*/React.createElement("tr", {
-      key: pid,
+      key: p.id,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid2 = rosterById[pid]) === null || _rosterById$pid2 === void 0 ? void 0 : _rosterById$pid2.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, p.name), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.touches), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -2516,9 +2623,9 @@ function GameSummary({
       className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
   }))))), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold print-page-break"
   }, "Full play-by-play"), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs text-muted-5 mb-2.5"
+    className: "text-xs text-muted-5 mb-2.5 no-print"
   }, "Spot a mistake? Remove a play below — the score and stats recalculate automatically."), /*#__PURE__*/React.createElement("div", {
     className: "space-y-2"
   }, game.plays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
@@ -2580,11 +2687,23 @@ function SeasonStats({
   const rosterById = Object.fromEntries((team.roster || []).map(p => [p.id, p]));
   const playerTotals = useMemo(() => {
     const totals = {};
+    for (const p of team.roster || []) {
+      totals[p.id] = {
+        yards: 0,
+        tds: 0,
+        touches: 0,
+        turnovers: 0,
+        games: new Set()
+      };
+    }
     for (const g of games) {
       if (g.status !== "final") continue;
+      for (const pid of g.presentIds || []) {
+        if (totals[pid]) totals[pid].games.add(g.id);
+      }
       const gameTotals = computePlayerStats(g);
       for (const [pid, s] of Object.entries(gameTotals)) {
-        totals[pid] = totals[pid] || {
+        if (!totals[pid]) totals[pid] = {
           yards: 0,
           tds: 0,
           touches: 0,
@@ -2595,11 +2714,10 @@ function SeasonStats({
         totals[pid].tds += s.tds;
         totals[pid].touches += s.touches;
         totals[pid].turnovers += s.turnovers;
-        totals[pid].games.add(g.id);
       }
     }
     return totals;
-  }, [games]);
+  }, [games, team.roster]);
   const qbTotals = useMemo(() => {
     const totals = {};
     for (const g of games) {
@@ -2631,16 +2749,16 @@ function SeasonStats({
   function exportCSV() {
     const rows = [["Player", "Games Played", "Touches", "Yards", "Yards/Touch", "TDs", "Turnovers"]];
     sortedIds.forEach(pid => {
-      var _rosterById$pid3;
+      var _rosterById$pid2;
       const s = playerTotals[pid];
-      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
+      rows.push([((_rosterById$pid2 = rosterById[pid]) === null || _rosterById$pid2 === void 0 ? void 0 : _rosterById$pid2.name) || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
     });
     rows.push([]);
     rows.push(["QB", "Games Played", "Completions", "Attempts", "Pass Yards", "Pass TDs", "INTs", "Sacks"]);
     sortedQBIds.forEach(pid => {
-      var _rosterById$pid4;
+      var _rosterById$pid3;
       const s = qbTotals[pid];
-      rows.push([((_rosterById$pid4 = rosterById[pid]) === null || _rosterById$pid4 === void 0 ? void 0 : _rosterById$pid4.name) || "Unknown", s.games.size, s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
+      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
     });
     rows.push([]);
     rows.push(["Date", "Opponent", "Result", "Score"]);
@@ -2653,10 +2771,18 @@ function SeasonStats({
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-2xl mx-auto px-4 sm:px-5 pb-16 pt-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "no-print"
   }, /*#__PURE__*/React.createElement(BackHeader, {
     title: `${team.name} · Season`,
     onBack: onBack
-  }), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "print-only mb-6"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "font-extrabold text-2xl"
+  }, team.name, " — Season Stats"), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm"
+  }, "Record: ", record.w, "-", record.l, record.t ? `-${record.t}` : "", " · ", record.pf, " points for · ", record.pa, " points against")), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-3 gap-2.5 mb-6"
   }, /*#__PURE__*/React.createElement(StatBlock, {
     label: "Record",
@@ -2667,12 +2793,19 @@ function SeasonStats({
   }), /*#__PURE__*/React.createElement(StatBlock, {
     label: "Points against",
     value: record.pa
-  })), sortedIds.length > 0 && /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "flex space-x-2.5 mb-6 no-print"
+  }, sortedIds.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: exportCSV,
-    className: "btn-outline w-full text-sm mb-6"
+    className: "btn-outline flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Download, {
     size: 16
-  }), " Export season CSV"), loading && /*#__PURE__*/React.createElement("p", {
+  }), " Export CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.print(),
+    className: "btn-outline flex-1 text-sm"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 16
+  }), " Export / print PDF")), loading && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-6"
   }, "Loading season…"), !loading && sortedQBIds.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
@@ -2697,14 +2830,14 @@ function SeasonStats({
   }, "INTs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Sacks"))), /*#__PURE__*/React.createElement("tbody", null, sortedQBIds.map(pid => {
-    var _rosterById$pid5;
+    var _rosterById$pid4;
     const s = qbTotals[pid];
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid4 = rosterById[pid]) === null || _rosterById$pid4 === void 0 ? void 0 : _rosterById$pid4.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -2740,7 +2873,7 @@ function SeasonStats({
   }, "TDs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, sortedIds.map(pid => {
-    var _rosterById$pid6;
+    var _rosterById$pid5;
     const s = playerTotals[pid];
     const ypt = s.touches ? (s.yards / s.touches).toFixed(1) : "0.0";
     return /*#__PURE__*/React.createElement("tr", {
@@ -2748,7 +2881,7 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid6 = rosterById[pid]) === null || _rosterById$pid6 === void 0 ? void 0 : _rosterById$pid6.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
