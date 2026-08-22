@@ -890,20 +890,28 @@ table { border-collapse: collapse; }
   .no-print { display: none !important; }
   .print-only { display: block !important; }
   html, body { background: #ffffff !important; }
-  body, .bg-ink, .card-panel, .bg-panel {
-    background: #ffffff !important;
+  /* Targeted selectors only — never the universal selector, which forces
+     recompute styles for every single element in the DOM before it can
+     even open the print dialog. .text-primary is set once on the app's
+     outer container and color inherits, so overriding it (plus the small,
+     fixed set of other color classes actually in use) covers virtually
+     all text without touching every node individually. */
+  body, .text-primary, .text-ink, .text-gold, .text-green, .text-red, .text-blue,
+  .text-muted-1, .text-muted-2, .text-muted-3, .text-muted-4, .text-muted-5, .text-white {
     color: #14171F !important;
+  }
+  .bg-ink, .card-panel, .bg-panel {
+    background: #ffffff !important;
     box-shadow: none !important;
   }
   .card-panel, table, th, td {
     border-color: #cccccc !important;
   }
-  * {
-    color: #14171F !important;
+  thead {
+    background: #eeeeee !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  thead { background: #eeeeee !important; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #cccccc !important; }
   tr { break-inside: avoid; }
@@ -2476,6 +2484,44 @@ function GameSummary({
     });
     setConfirmDeletePlay(null);
   }
+  function exportGameCSV() {
+    const rows = [["Game", `${settings.name} vs ${game.opponent}`]];
+    rows.push(["Date", game.date]);
+    rows.push(["Final score", `${settings.name} ${derived.score.us} - ${derived.score.them} ${game.opponent}`]);
+    rows.push([]);
+    rows.push(["Player stats"]);
+    rows.push(["Player", "Touches", "Yards", "TDs", "Turnovers"]);
+    fullPlayerRows.forEach(p => {
+      const s = stats[p.id] || {
+        touches: 0,
+        yards: 0,
+        tds: 0,
+        turnovers: 0
+      };
+      rows.push([p.name, s.touches, s.yards, s.tds, s.turnovers]);
+    });
+    if (Object.keys(qbStats).length > 0) {
+      rows.push([]);
+      rows.push(["Passing"]);
+      rows.push(["QB", "Completions", "Attempts", "Pass Yards", "Pass TDs", "INTs", "Sacks"]);
+      Object.entries(qbStats).forEach(([pid, s]) => {
+        var _rosterById$pid;
+        rows.push([((_rosterById$pid = rosterById[pid]) === null || _rosterById$pid === void 0 ? void 0 : _rosterById$pid.name) || "Unknown", s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
+      });
+    }
+    rows.push([]);
+    rows.push(["Full play-by-play"]);
+    rows.push(["Quarter", "Play", "Player", "Yards", "Notes"]);
+    game.plays.forEach(p => {
+      const player = rosterById[p.playerId];
+      const passer = rosterById[p.passerId];
+      const label = PLAY_LABELS[p.type] || p.type;
+      const who = p.type === "pass_complete" && passer ? `${passer.name} \u2192 ${player ? player.name : ""}` : player ? player.name : passer ? passer.name : "";
+      const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
+      rows.push([`Q${p.quarter || 1}`, label, who, typeof p.yards === "number" ? p.yards : "", notes]);
+    });
+    downloadCSV(`${settings.name.replace(/\s+/g, "_")}_vs_${game.opponent.replace(/\s+/g, "_")}_${game.date}.csv`, rows);
+  }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-lg mx-auto px-4 sm:px-5 pb-16 pt-6"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2538,12 +2584,19 @@ function GameSummary({
     className: "btn-outline-red flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 15
-  }), " Delete game")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => window.print(),
-    className: "btn-outline w-full text-sm mb-6 no-print"
+  }), " Delete game")), /*#__PURE__*/React.createElement("div", {
+    className: "flex space-x-2.5 mb-6 no-print"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: exportGameCSV,
+    className: "btn-outline flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Download, {
     size: 15
-  }), " Export / print stat sheet (PDF)"), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }), " Export CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.print(),
+    className: "btn-outline flex-1 text-sm"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 15
+  }), " Export / print PDF")), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Passing"), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-6 overflow-x-auto"
@@ -2564,13 +2617,13 @@ function GameSummary({
   }, "INTs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Sacks"))), /*#__PURE__*/React.createElement("tbody", null, Object.entries(qbStats).map(([pid, s]) => {
-    var _rosterById$pid;
+    var _rosterById$pid2;
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid = rosterById[pid]) === null || _rosterById$pid === void 0 ? void 0 : _rosterById$pid.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid2 = rosterById[pid]) === null || _rosterById$pid2 === void 0 ? void 0 : _rosterById$pid2.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.completions, "/", s.attempts), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -2749,16 +2802,16 @@ function SeasonStats({
   function exportCSV() {
     const rows = [["Player", "Games Played", "Touches", "Yards", "Yards/Touch", "TDs", "Turnovers"]];
     sortedIds.forEach(pid => {
-      var _rosterById$pid2;
+      var _rosterById$pid3;
       const s = playerTotals[pid];
-      rows.push([((_rosterById$pid2 = rosterById[pid]) === null || _rosterById$pid2 === void 0 ? void 0 : _rosterById$pid2.name) || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
+      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
     });
     rows.push([]);
     rows.push(["QB", "Games Played", "Completions", "Attempts", "Pass Yards", "Pass TDs", "INTs", "Sacks"]);
     sortedQBIds.forEach(pid => {
-      var _rosterById$pid3;
+      var _rosterById$pid4;
       const s = qbTotals[pid];
-      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
+      rows.push([((_rosterById$pid4 = rosterById[pid]) === null || _rosterById$pid4 === void 0 ? void 0 : _rosterById$pid4.name) || "Unknown", s.games.size, s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
     });
     rows.push([]);
     rows.push(["Date", "Opponent", "Result", "Score"]);
@@ -2830,14 +2883,14 @@ function SeasonStats({
   }, "INTs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Sacks"))), /*#__PURE__*/React.createElement("tbody", null, sortedQBIds.map(pid => {
-    var _rosterById$pid4;
+    var _rosterById$pid5;
     const s = qbTotals[pid];
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid4 = rosterById[pid]) === null || _rosterById$pid4 === void 0 ? void 0 : _rosterById$pid4.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -2873,7 +2926,7 @@ function SeasonStats({
   }, "TDs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, sortedIds.map(pid => {
-    var _rosterById$pid5;
+    var _rosterById$pid6;
     const s = playerTotals[pid];
     const ypt = s.touches ? (s.yards / s.touches).toFixed(1) : "0.0";
     return /*#__PURE__*/React.createElement("tr", {
@@ -2881,7 +2934,7 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid6 = rosterById[pid]) === null || _rosterById$pid6 === void 0 ? void 0 : _rosterById$pid6.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
