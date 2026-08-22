@@ -914,7 +914,6 @@ table { border-collapse: collapse; }
   }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #cccccc !important; }
-  tr { break-inside: avoid; }
   .print-page-break { break-before: page; }
 }
 
@@ -2676,11 +2675,11 @@ function GameSummary({
       className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
   }))))), /*#__PURE__*/React.createElement("p", {
-    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold print-page-break"
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold no-print"
   }, "Full play-by-play"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-muted-5 mb-2.5 no-print"
-  }, "Spot a mistake? Remove a play below — the score and stats recalculate automatically."), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2"
+  }, "Spot a mistake? Remove a play below — the score and stats recalculate automatically. The play-by-play isn't included in the PDF export, to keep it fast — use CSV export if you want the full log."), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-2 no-print"
   }, game.plays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
     key: p.id,
     play: p,
