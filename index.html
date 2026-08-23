@@ -44,6 +44,14 @@
   const auth = firebase.auth();
   const db = firebase.firestore();
   const FieldValue = firebase.firestore.FieldValue;
+  // Offline support: Firestore's own persistence queues writes locally
+  // (IndexedDB) whenever the connection drops and sends them automatically
+  // once it's back, using the exact same .update()/arrayUnion() calls
+  // already in use elsewhere — no separate queue to build or keep in sync.
+  // synchronizeTabs lets multiple open tabs share one local cache instead
+  // of fighting over it. Ignored if the browser doesn't support it (e.g.
+  // private browsing) — the app still works, just without offline caching.
+  db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 </script>
 
 <script>
@@ -845,6 +853,7 @@ table { border-collapse: collapse; }
 
 /* space-between-children */
 .space-y-1\.5 > * + * { margin-top: 0.375rem; }
+.space-y-1 > * + * { margin-top: 0.25rem; }
 .space-y-2 > * + * { margin-top: 0.5rem; }
 .space-y-3 > * + * { margin-top: 0.75rem; }
 .space-y-4 > * + * { margin-top: 1rem; }
@@ -958,6 +967,7 @@ table { border-collapse: collapse; }
 .sticky { position: sticky; }
 .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
 .inset-y-0 { top: 0; bottom: 0; }
+.inset-x-0 { left: 0; right: 0; }
 .top-0 { top: 0; }
 .top-4 { top: 1rem; }
 .bottom-0 { bottom: 0; }
@@ -1265,6 +1275,23 @@ async function createGame(teamId, game) {
 async function updateGame(teamId, gameId, data) {
   await gamesCol(teamId).doc(gameId).update(data);
 }
+// Appending/removing plays uses Firestore's atomic array operations rather
+// than a client-side read-modify-write of the whole array. A blanket
+// { plays: g.plays } overwrite is a real data-loss risk the moment two
+// writes land close together — a second device, a stale reconnected tab —
+// since whichever write lands last silently wins and any play the other
+// write added is gone with no error. arrayUnion/arrayRemove are applied
+// server-side against the current document, so this can't happen.
+async function appendPlays(teamId, gameId, entries) {
+  await gamesCol(teamId).doc(gameId).update({
+    plays: FieldValue.arrayUnion(...entries)
+  });
+}
+async function removePlaysFromGame(teamId, gameId, entries) {
+  await gamesCol(teamId).doc(gameId).update({
+    plays: FieldValue.arrayRemove(...entries)
+  });
+}
 async function deleteGame(teamId, gameId) {
   await gamesCol(teamId).doc(gameId).delete();
 }
@@ -1273,6 +1300,24 @@ async function deleteGame(teamId, gameId) {
 // Turns a raw Firestore/Firebase error into a message a coach can
 // actually act on, instead of a silent failure or a raw error code.
 // ============================================================
+// Tracks basic browser connectivity so the coach always has visibility into
+// whether they're online — the actual write queuing/sync during an outage
+// is handled by Firestore's own persistence layer (enabled at startup);
+// this hook is purely for showing that status in the UI.
+function useOnlineStatus() {
+  const [online, setOnline] = useState(typeof navigator === "undefined" || navigator.onLine);
+  useEffect(() => {
+    const goOnline = () => setOnline(true);
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+  return online;
+}
 function describeFirebaseError(err, context) {
   const code = err && err.code || "";
   const prefix = context ? `Couldn't ${context}` : "Something went wrong";
@@ -1301,6 +1346,7 @@ function FlagStatApp() {
   const [activeTeam, setActiveTeam] = useState(null);
   const [activeGame, setActiveGame] = useState(null);
   const [toast, setToast] = useState(null);
+  const online = useOnlineStatus();
   useEffect(() => auth.onAuthStateChanged(setAuthUser), []);
   useEffect(() => {
     if (!authUser) {
@@ -1356,7 +1402,9 @@ function FlagStatApp() {
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-ink text-primary font-sans"
-  }, /*#__PURE__*/React.createElement("style", null, GLOBAL_STYLES), toast && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("style", null, GLOBAL_STYLES), !online && /*#__PURE__*/React.createElement("div", {
+    className: "fixed top-0 inset-x-0 z-50 bg-red text-white text-xs font-semibold text-center py-2 no-print"
+  }, "You're offline — plays are saved on this device and will sync automatically once you're back online."), toast && /*#__PURE__*/React.createElement("div", {
     className: "fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gold text-ink px-5 py-3 rounded-lg font-semibold text-sm shadow-lg text-center",
     style: {
       maxWidth: "92vw"
@@ -1396,7 +1444,15 @@ function FlagStatApp() {
   }), screen === "seasonStats" && activeTeam && /*#__PURE__*/React.createElement(SeasonStats, {
     team: activeTeam,
     onBack: () => setScreen("dashboard"),
-    flash: flash
+    flash: flash,
+    onUpdateTeam: async updates => {
+      const updated = {
+        ...activeTeam,
+        ...updates
+      };
+      setActiveTeam(updated);
+      await updateTeam(activeTeam.id, updates);
+    }
   }), screen === "teamForm" && /*#__PURE__*/React.createElement(TeamForm, {
     team: activeTeam,
     onCancel: () => setScreen("dashboard"),
@@ -1457,12 +1513,18 @@ function FlagStatApp() {
     }
   }), screen === "liveGame" && activeGame && activeTeam && /*#__PURE__*/React.createElement(LiveGame, {
     game: activeGame,
-    onChange: async g => {
+    onChange: async (g, writeHint) => {
       setActiveGame(g);
       try {
-        await updateGame(activeTeam.id, g.id, {
-          plays: g.plays
-        });
+        if (writeHint && writeHint.type === "append" && writeHint.entries.length > 0) {
+          await appendPlays(activeTeam.id, g.id, writeHint.entries);
+        } else if (writeHint && writeHint.type === "remove" && writeHint.entries.length > 0) {
+          await removePlaysFromGame(activeTeam.id, g.id, writeHint.entries);
+        } else {
+          await updateGame(activeTeam.id, g.id, {
+            plays: g.plays
+          });
+        }
       } catch (err) {
         flash(describeFirebaseError(err, "save that play — it's showing locally but may not have saved"));
       }
@@ -1486,12 +1548,16 @@ function FlagStatApp() {
   }), screen === "gameSummary" && activeGame && activeTeam && /*#__PURE__*/React.createElement(GameSummary, {
     game: activeGame,
     onBack: () => setScreen("dashboard"),
-    onChange: async g => {
+    onChange: async (g, writeHint) => {
       setActiveGame(g);
       try {
-        await updateGame(activeTeam.id, g.id, {
-          plays: g.plays
-        });
+        if (writeHint && writeHint.type === "remove" && writeHint.entries.length > 0) {
+          await removePlaysFromGame(activeTeam.id, g.id, writeHint.entries);
+        } else {
+          await updateGame(activeTeam.id, g.id, {
+            plays: g.plays
+          });
+        }
       } catch (err) {
         flash(describeFirebaseError(err, "save that change"));
       }
@@ -1796,7 +1862,8 @@ function TeamForm({
       firstDownMode,
       yardsPerFirstDown: Number(yardsPerFirstDown),
       touchdownPoints: Number(touchdownPoints),
-      roster: (team === null || team === void 0 ? void 0 : team.roster) || []
+      roster: (team === null || team === void 0 ? void 0 : team.roster) || [],
+      season: (team === null || team === void 0 ? void 0 : team.season) || String(new Date().getFullYear())
     });
   }
   return /*#__PURE__*/React.createElement("div", {
@@ -1894,6 +1961,60 @@ function TeamForm({
 // ============================================================
 // Roster editor — add, rename, renumber, remove
 // ============================================================
+function BulkImportModal({
+  onCancel,
+  onConfirm
+}) {
+  const [text, setText] = useState("");
+  const parsed = useMemo(() => parseRosterBulkText(text), [text]);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, "Bulk add players"), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancel,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-3 mb-4"
+  }, "Paste one player per line. Numbers are optional and can go before or after the name — \"12 John Smith\" and \"John Smith 12\" both work."), /*#__PURE__*/React.createElement("textarea", {
+    value: text,
+    onChange: e => setText(e.target.value),
+    placeholder: "12 John Smith\nJane Doe 7\nAmy Lee",
+    className: "field-input",
+    style: {
+      minHeight: "8rem",
+      resize: "vertical"
+    }
+  }), parsed.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-4"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
+  }, parsed.length, " player", parsed.length === 1 ? "" : "s", " found"), /*#__PURE__*/React.createElement("div", {
+    className: "card-panel p-3 space-y-1",
+    style: {
+      maxHeight: "10rem",
+      overflowY: "auto"
+    }
+  }, parsed.map((p, i) => /*#__PURE__*/React.createElement("p", {
+    key: i,
+    className: "text-sm"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "font-mono text-muted-3 w-8",
+    style: {
+      display: "inline-block"
+    }
+  }, p.number || "–"), p.name)))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => parsed.length > 0 && onConfirm(parsed),
+    disabled: parsed.length === 0,
+    className: "btn-primary w-full text-base mt-4 disabled-dim-60"
+  }, "Add ", parsed.length > 0 ? parsed.length : "", " player", parsed.length === 1 ? "" : "s")));
+}
 function RosterEditor({
   team,
   onBack,
@@ -1907,6 +2028,7 @@ function RosterEditor({
   const [editName, setEditName] = useState("");
   const [editNumber, setEditNumber] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   function addPlayer(e) {
     e.preventDefault();
     if (!name.trim()) return;
@@ -1919,6 +2041,17 @@ function RosterEditor({
     onSave(next);
     setName("");
     setNumber("");
+  }
+  function bulkAddPlayers(parsed) {
+    const additions = parsed.map(p => ({
+      id: uid(),
+      name: p.name,
+      number: p.number || ""
+    }));
+    const next = [...roster, ...additions];
+    setRoster(next);
+    onSave(next);
+    setBulkImportOpen(false);
   }
   function startEdit(p) {
     setEditingId(p.id);
@@ -1948,7 +2081,7 @@ function RosterEditor({
     onBack: onBack
   }), /*#__PURE__*/React.createElement("form", {
     onSubmit: addPlayer,
-    className: "flex space-x-2 mb-6"
+    className: "flex space-x-2 mb-3"
   }, /*#__PURE__*/React.createElement("input", {
     value: number,
     onChange: e => setNumber(e.target.value.replace(/\D/g, "").slice(0, 3)),
@@ -1965,7 +2098,12 @@ function RosterEditor({
     className: "btn-primary px-5"
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 18
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setBulkImportOpen(true),
+    className: "btn-outline w-full text-sm mb-6"
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 16
+  }), " Bulk add players"), /*#__PURE__*/React.createElement("div", {
     className: "space-y-3 mb-8"
   }, roster.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
@@ -2028,6 +2166,9 @@ function RosterEditor({
     danger: true,
     onCancel: () => setConfirmRemove(null),
     onConfirm: () => removePlayer(confirmRemove.id)
+  }), bulkImportOpen && /*#__PURE__*/React.createElement(BulkImportModal, {
+    onCancel: () => setBulkImportOpen(false),
+    onConfirm: bulkAddPlayers
   }));
 }
 
@@ -2063,6 +2204,7 @@ function GameSetup({
       presentIds,
       initialPossession: possession,
       initialQBId: needsQB ? qbId : null,
+      season: team.season || String(new Date().getFullYear()),
       plays: []
     });
   }
@@ -2160,23 +2302,34 @@ function LiveGame({
     onChange({
       ...game,
       plays: [...game.plays, ...entries]
+    }, {
+      type: "append",
+      entries
     });
   }
   function addPlay(play) {
     addPlays([play]);
   }
   function removePlay(playId) {
+    const removed = game.plays.find(p => p.id === playId);
     onChange({
       ...game,
       plays: game.plays.filter(p => p.id !== playId)
-    });
+    }, removed ? {
+      type: "remove",
+      entries: [removed]
+    } : undefined);
     setConfirmDeletePlay(null);
   }
   function undoLast() {
     if (game.plays.length === 0) return;
+    const removed = game.plays[game.plays.length - 1];
     onChange({
       ...game,
       plays: game.plays.slice(0, -1)
+    }, {
+      type: "remove",
+      entries: [removed]
     });
   }
   function handleInstant(type) {
@@ -2646,6 +2799,28 @@ function FieldVisual({
 // the whole point.
 // "Rivals's" reads wrong — standard English drops the extra s for a
 // possessive on a name that already ends in one ("Rivals'", not "Rivals's").
+// Parses pasted roster text leniently, one player per line, accepting
+// "12 John Smith", "John Smith 12", "John Smith, #12", or just a bare
+// name with no number at all — whatever a coach happens to paste from a
+// spreadsheet or a text message doesn't need to match one exact format.
+function parseRosterBulkText(text) {
+  return text.split("\n").map(line => line.trim()).filter(Boolean).map(line => {
+    let m = line.match(/^#?(\d{1,3})[\s,\-]+(.+)$/);
+    if (m) return {
+      number: m[1],
+      name: m[2].trim()
+    };
+    m = line.match(/^(.+?)[\s,\-]+#?(\d{1,3})$/);
+    if (m) return {
+      number: m[2],
+      name: m[1].trim()
+    };
+    return {
+      number: "",
+      name: line
+    };
+  }).filter(p => p.name);
+}
 function possessive(name) {
   return name.endsWith("s") ? `${name}'` : `${name}'s`;
 }
@@ -3025,10 +3200,14 @@ function GameSummary({
   const [opponent, setOpponent] = useState(game.opponent);
   const [date, setDate] = useState(game.date);
   function removePlay(playId) {
+    const removed = game.plays.find(p => p.id === playId);
     onChange({
       ...game,
       plays: game.plays.filter(p => p.id !== playId)
-    });
+    }, removed ? {
+      type: "remove",
+      entries: [removed]
+    } : undefined);
     setConfirmDeletePlay(null);
   }
   function exportGameCSV() {
@@ -3362,13 +3541,51 @@ function GameSummary({
 // Season stats — games already come with plays embedded via
 // Firestore, so no lazy per-game loading is needed here.
 // ============================================================
+function NewSeasonModal({
+  currentSeason,
+  onCancel,
+  onConfirm
+}) {
+  const suggested = /^\d{4}$/.test(currentSeason) ? String(Number(currentSeason) + 1) : "";
+  const [label, setLabel] = useState("");
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, "Start a new season"), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancel,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-3 mb-4"
+  }, "Games you track from now on will be grouped under the new season. Nothing from ", currentSeason, " moves or changes — you can switch back to it anytime from the dropdown."), /*#__PURE__*/React.createElement(Field, {
+    label: "Season name"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: label,
+    onChange: e => setLabel(e.target.value),
+    className: inputCls,
+    placeholder: suggested ? `e.g. ${suggested}` : "e.g. 2027"
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => label.trim() && onConfirm(label.trim()),
+    disabled: !label.trim(),
+    className: "btn-primary w-full text-base mt-3 disabled-dim-60"
+  }, "Start season")));
+}
 function SeasonStats({
   team,
   onBack,
-  flash
+  flash,
+  onUpdateTeam
 }) {
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState([]);
+  const [selectedSeason, setSelectedSeason] = useState(team.season || String(new Date().getFullYear()));
+  const [newSeasonOpen, setNewSeasonOpen] = useState(false);
   useEffect(() => {
     const unsub = gamesCol(team.id).onSnapshot(snap => {
       setGames(snap.docs.map(d => ({
@@ -3382,7 +3599,27 @@ function SeasonStats({
     });
     return unsub;
   }, [team.id]);
-  const record = useMemo(() => computeRecord(games), [games]);
+  const availableSeasons = useMemo(() => {
+    const set = new Set(games.map(g => g.season || "Unlabeled"));
+    set.add(team.season || String(new Date().getFullYear()));
+    return [...set].sort().reverse();
+  }, [games, team.season]);
+  const filteredGames = useMemo(() => games.filter(g => (g.season || "Unlabeled") === selectedSeason), [games, selectedSeason]);
+  async function startNewSeason(label) {
+    setNewSeasonOpen(false);
+    setSelectedSeason(label);
+    if (onUpdateTeam) {
+      try {
+        await onUpdateTeam({
+          season: label
+        });
+        flash && flash(`Started the ${label} season — new games will be grouped here. Past seasons are still here too.`);
+      } catch (err) {
+        flash && flash(describeFirebaseError(err, "start a new season"));
+      }
+    }
+  }
+  const record = useMemo(() => computeRecord(filteredGames), [filteredGames]);
   const rosterById = Object.fromEntries((team.roster || []).map(p => [p.id, p]));
   const playerTotals = useMemo(() => {
     const totals = {};
@@ -3397,7 +3634,7 @@ function SeasonStats({
     for (const p of team.roster || []) {
       totals[p.id] = emptyTotal();
     }
-    for (const g of games) {
+    for (const g of filteredGames) {
       if (g.status !== "final") continue;
       for (const pid of g.presentIds || []) {
         if (totals[pid]) totals[pid].games.add(g.id);
@@ -3409,10 +3646,10 @@ function SeasonStats({
       }
     }
     return totals;
-  }, [games, team.roster]);
+  }, [filteredGames, team.roster]);
   const qbTotals = useMemo(() => {
     const totals = {};
-    for (const g of games) {
+    for (const g of filteredGames) {
       if (g.status !== "final") continue;
       const gameTotals = computeQBStats(g);
       for (const [pid, s] of Object.entries(gameTotals)) {
@@ -3435,7 +3672,7 @@ function SeasonStats({
       }
     }
     return totals;
-  }, [games]);
+  }, [filteredGames]);
   const sortedQBIds = Object.keys(qbTotals).sort((a, b) => qbTotals[b].passYards - qbTotals[a].passYards);
   const sortedIds = Object.keys(playerTotals).sort((a, b) => {
     const ay = playerTotals[a].rushYards + playerTotals[a].recYards;
@@ -3474,7 +3711,7 @@ function SeasonStats({
     });
     rows.push([]);
     rows.push(["Date", "Opponent", "Result", "Score"]);
-    [...games].sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(g => {
+    [...filteredGames].sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(g => {
       const s = computeState(g).score;
       const win = g.status === "final" ? s.us > s.them ? "W" : s.us < s.them ? "L" : "T" : "—";
       rows.push([g.date, g.opponent, win, g.status === "final" ? `${s.us}-${s.them}` : "live"]);
@@ -3492,9 +3729,26 @@ function SeasonStats({
     className: "print-only mb-6"
   }, /*#__PURE__*/React.createElement("p", {
     className: "font-extrabold text-2xl"
-  }, team.name, " — Season Stats"), /*#__PURE__*/React.createElement("p", {
+  }, team.name, " — ", selectedSeason, " Season Stats"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm"
   }, "Record: ", record.w, "-", record.l, record.t ? `-${record.t}` : "", " · ", record.pf, " points for · ", record.pa, " points against")), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center space-x-2 mb-5 no-print"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: selectedSeason,
+    onChange: e => setSelectedSeason(e.target.value),
+    className: "field-input flex-1",
+    style: {
+      width: "auto"
+    }
+  }, availableSeasons.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s,
+    value: s
+  }, s, " season"))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNewSeasonOpen(true),
+    className: "btn-outline text-sm"
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 16
+  }), " New season")), /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-3 gap-3 mb-6 no-print"
   }, /*#__PURE__*/React.createElement(StatBlock, {
     label: "Record",
@@ -3707,7 +3961,7 @@ function SeasonStats({
     className: "text-xs text-muted-5 mb-2.5 no-print"
   }, "Not included in the PDF export, to keep it fast — use CSV export if you want the full schedule and results."), /*#__PURE__*/React.createElement("div", {
     className: "space-y-2 no-print"
-  }, [...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(g => {
+  }, [...filteredGames].sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(g => {
     const s = computeState(g).score;
     const win = g.status === "final" ? s.us > s.them ? "W" : s.us < s.them ? "L" : "T" : null;
     return /*#__PURE__*/React.createElement("div", {
@@ -3722,7 +3976,11 @@ function SeasonStats({
     }, win && /*#__PURE__*/React.createElement("span", {
       className: `w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${win === "W" ? "bg-green" : win === "L" ? "bg-red" : "bg-blue"}`
     }, win), /*#__PURE__*/React.createElement("span", null, g.status === "final" ? `${s.us}–${s.them}` : "live")));
-  })));
+  })), newSeasonOpen && /*#__PURE__*/React.createElement(NewSeasonModal, {
+    currentSeason: selectedSeason,
+    onCancel: () => setNewSeasonOpen(false),
+    onConfirm: startNewSeason
+  }));
 }
 function StatBlock({
   label,
