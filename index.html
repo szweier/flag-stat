@@ -228,6 +228,7 @@ function ownYardLine(team, settings) {
 function formatYardLine(ballOn, fieldLength) {
   const half = fieldLength / 2;
   const rounded = Math.round(ballOn);
+  if (rounded <= 0 || rounded >= fieldLength) return "end zone";
   if (Math.abs(ballOn - half) < 0.5) return "midfield";
   if (ballOn < half) return `own ${rounded}`;
   return `their ${Math.round(fieldLength - ballOn)}`;
@@ -574,6 +575,27 @@ function computeScoringPlays(game) {
   }
   return scores;
 }
+
+// The play-by-play log needs to say where the ball started and ended for
+// each individual play — not just the final state after every play has
+// been folded together. This replays the same way computeState does, but
+// keeps the before/after snapshot at every step instead of discarding it.
+function computePlayContexts(game) {
+  const settings = game.teamSettings;
+  let state = initialGameState(game);
+  const contexts = {};
+  for (const p of game.plays) {
+    const before = state;
+    const after = applyPlayToState(state, p, settings);
+    contexts[p.id] = {
+      before,
+      after,
+      fieldLength: settings.fieldLength
+    };
+    state = after;
+  }
+  return contexts;
+}
 function emptyPlayerStats() {
   return {
     rushAtt: 0,
@@ -593,7 +615,8 @@ function emptyPlayerStats() {
     punts: 0,
     puntYards: 0,
     puntReturns: 0,
-    puntReturnYards: 0
+    puntReturnYards: 0,
+    twoPtConv: 0
   };
 }
 function computePlayerStats(game) {
@@ -650,6 +673,9 @@ function computePlayerStats(game) {
     // or recovered it would be backwards, since that's a good play for us.
     if (p.type === "interception" && p.possession === "us" && p.passerId) bump(p.passerId).turnovers += 1;
     if (p.type === "fumble" && p.possession === "us" && p.playerId) bump(p.playerId).turnovers += 1;
+    // A successful 2pt conversion only ever has playerId set when it was
+    // good (see handlePAT) — no need to also check the result field.
+    if (p.type === "pat2" && p.playerId) bump(p.playerId).twoPtConv += 1;
   }
   return totals;
 }
@@ -2107,6 +2133,7 @@ function LiveGame({
   const [showFullLog, setShowFullLog] = useState(false);
   const [qbPickerOpen, setQbPickerOpen] = useState(false);
   const [changeBallOpen, setChangeBallOpen] = useState(false);
+  const [patDraft, setPatDraft] = useState(null); // { isTwoPoint } while the "how'd they score" prompt is open
   const settings = game.teamSettings;
   const roster = settings.roster.filter(p => {
     var _game$presentIds;
@@ -2114,6 +2141,7 @@ function LiveGame({
   });
   const derived = useMemo(() => computeState(game), [game]);
   const scoringPlayIds = useMemo(() => new Set(computeScoringPlays(game).map(s => s.playId)), [game]);
+  const playContexts = useMemo(() => computePlayContexts(game), [game]);
   const currentQB = settings.roster.find(p => p.id === derived.currentQBId);
   function addPlays(playList) {
     let state = derived;
@@ -2196,12 +2224,18 @@ function LiveGame({
     addPlays(playsToAdd);
     setDraft(null);
   }
-  function handlePAT(success, isTwoPoint) {
-    addPlay({
+  function handlePAT(success, isTwoPoint, extra) {
+    const entry = {
       type: isTwoPoint ? "pat2" : "pat1",
       result: success ? "good" : "no_good",
       spot: isTwoPoint ? 10 : 5
-    });
+    };
+    if (success && extra) {
+      entry.scoringPlayType = extra.scoringPlayType;
+      entry.playerId = extra.playerId || null;
+      if (extra.scoringPlayType === "pass" && extra.passerId) entry.passerId = extra.passerId;
+    }
+    addPlay(entry);
   }
   function handleSetQB(playerId) {
     addPlay({
@@ -2275,18 +2309,31 @@ function LiveGame({
     }, "Touchdown! Choose the try for ", derived.pendingPAT === "us" ? settings.name : game.opponent, ":"), /*#__PURE__*/React.createElement("div", {
       className: "grid grid-cols-2 gap-3"
     }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => handlePAT(true, false),
-      className: "bg-green rounded-xl py-5 font-bold shadow active-dim-90"
+      onClick: () => setPatDraft({
+        isTwoPoint: false
+      }),
+      className: "play-btn play-btn-green"
     }, "1pt (from 5)", /*#__PURE__*/React.createElement("br", null), "Good"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(false, false),
-      className: "bg-red-dim rounded-xl py-5 font-bold shadow active-dim-90"
+      className: "play-btn play-btn-red"
     }, "1pt (from 5)", /*#__PURE__*/React.createElement("br", null), "No Good"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => handlePAT(true, true),
-      className: "bg-green rounded-xl py-5 font-bold shadow active-dim-90"
+      onClick: () => setPatDraft({
+        isTwoPoint: true
+      }),
+      className: "play-btn play-btn-green"
     }, "2pt (from 10)", /*#__PURE__*/React.createElement("br", null), "Good"), /*#__PURE__*/React.createElement("button", {
       onClick: () => handlePAT(false, true),
-      className: "bg-red-dim rounded-xl py-5 font-bold shadow active-dim-90"
-    }, "2pt (from 10)", /*#__PURE__*/React.createElement("br", null), "No Good"))));
+      className: "play-btn play-btn-red"
+    }, "2pt (from 10)", /*#__PURE__*/React.createElement("br", null), "No Good"))), patDraft && /*#__PURE__*/React.createElement(PATScoreModal, {
+      isTwoPoint: patDraft.isTwoPoint,
+      roster: roster,
+      currentQBId: derived.currentQBId,
+      onCancel: () => setPatDraft(null),
+      onConfirm: extra => {
+        handlePAT(true, patDraft.isTwoPoint, extra);
+        setPatDraft(null);
+      }
+    }));
   }
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-lg mx-auto px-4 sm:px-5 pb-24"
@@ -2343,6 +2390,7 @@ function LiveGame({
   }, shownPlays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
     key: p.id,
     play: p,
+    ctx: playContexts[p.id],
     roster: settings.roster,
     team: settings,
     opponent: game.opponent,
@@ -2470,6 +2518,75 @@ function ChangeBallModal({
     className: "btn-primary w-full text-base mt-5"
   }, "Confirm")));
 }
+function PATScoreModal({
+  isTwoPoint,
+  roster,
+  currentQBId,
+  onCancel,
+  onConfirm
+}) {
+  const [scoringPlayType, setScoringPlayType] = useState("run");
+  const [playerId, setPlayerId] = useState("");
+  const [passerId, setPasserId] = useState(currentQBId || "");
+  function confirm() {
+    onConfirm({
+      scoringPlayType,
+      playerId,
+      passerId: scoringPlayType === "pass" ? passerId : ""
+    });
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, isTwoPoint ? "2pt" : "1pt", " conversion good!"), /*#__PURE__*/React.createElement("button", {
+    onClick: onCancel,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "How'd they score?"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Chip, {
+    active: scoringPlayType === "run",
+    onClick: () => setScoringPlayType("run")
+  }, "Run"), /*#__PURE__*/React.createElement(Chip, {
+    active: scoringPlayType === "pass",
+    onClick: () => setScoringPlayType("pass")
+  }, "Pass"))), scoringPlayType === "pass" && roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
+    label: "Passer"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: passerId,
+    onChange: e => setPasserId(e.target.value),
+    className: inputCls
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.number ? `#${p.number} ` : "", p.name)))), roster.length > 0 && /*#__PURE__*/React.createElement(Field, {
+    label: scoringPlayType === "pass" ? "Receiver" : "Ball carrier"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: playerId,
+    onChange: e => setPlayerId(e.target.value),
+    className: inputCls
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.number ? `#${p.number} ` : "", p.name)))), /*#__PURE__*/React.createElement("button", {
+    onClick: confirm,
+    className: "btn-primary w-full text-base mt-3"
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 18
+  }), " Log conversion")));
+}
 function FieldVisual({
   length,
   ballOn,
@@ -2521,27 +2638,142 @@ function FieldVisual({
     className: "flex justify-between text-xs font-mono text-muted-4 mt-0.5"
   }, /*#__PURE__*/React.createElement("span", null, "your goal"), /*#__PURE__*/React.createElement("span", null, "midfield"), /*#__PURE__*/React.createElement("span", null, "their goal")));
 }
+
+// Builds a full, human-readable sentence for one play — the way ESPN's
+// play-by-play reads, rather than a compact stat-line fragment. Needs the
+// before/after field position for that specific play (from
+// computePlayContexts), since "where it started" and "where it ended" is
+// the whole point.
+// "Rivals's" reads wrong — standard English drops the extra s for a
+// possessive on a name that already ends in one ("Rivals'", not "Rivals's").
+function possessive(name) {
+  return name.endsWith("s") ? `${name}'` : `${name}'s`;
+}
+function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
+  const fieldLength = ctx.fieldLength;
+  const player = roster.find(p => p.id === play.playerId);
+  const passer = roster.find(p => p.id === play.passerId);
+  const beforeSpot = formatYardLine(ctx.before.ballOn, fieldLength);
+  const afterSpot = formatYardLine(ctx.after.ballOn, fieldLength);
+  const actingTeam = play.possession === "us" ? team.name : opponent;
+  const defendingTeam = play.possession === "us" ? opponent : team.name;
+  const plural = n => Math.abs(n) === 1 ? "yard" : "yards";
+  const td = scored ? " TOUCHDOWN!" : "";
+  switch (play.type) {
+    case "run":
+      {
+        const who = player ? player.name : `${possessive(actingTeam)} ball carrier`;
+        const yards = play.yards || 0;
+        if (yards < 0) return `${who} was stopped for a loss of ${Math.abs(yards)} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
+        if (yards === 0) return `${who} was stopped for no gain at the ${afterSpot}.${td}`;
+        return `${who} ran for ${yards} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
+      }
+    case "pass_complete":
+      {
+        const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
+        const rec = player ? player.name : "a receiver";
+        const yards = play.yards || 0;
+        return `${qb} completed a pass to ${rec} for ${yards} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
+      }
+    case "pass_incomplete":
+      {
+        const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
+        return `${qb}'s pass fell incomplete.`;
+      }
+    case "sack":
+      {
+        const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
+        const yards = Math.abs(play.yards || 0);
+        const byWhom = player ? `, by ${player.name},` : "";
+        return `${qb} was sacked${byWhom} for a loss of ${yards} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.`;
+      }
+    case "interception":
+      {
+        const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
+        const picker = player ? player.name : defendingTeam;
+        const air = play.airYards || 0;
+        const ret = play.yards || 0;
+        const pickSpot = formatYardLine(clamp(play.possession === "us" ? ctx.before.ballOn + air : ctx.before.ballOn - air, 0, fieldLength), fieldLength);
+        const airClause = air > 0 ? ` at the ${pickSpot}` : ` at the line of scrimmage`;
+        const retClause = ret > 0 ? `, returned ${ret} ${plural(ret)} to the ${afterSpot}` : ` and downed at the ${afterSpot}`;
+        return `${qb}'s pass was intercepted by ${picker}${airClause}${retClause}.${td}`;
+      }
+    case "fumble":
+      {
+        const ret = play.yards || 0;
+        const retClause = ret > 0 ? `, returned ${ret} ${plural(ret)} to the ${afterSpot}` : ` at the ${beforeSpot}`;
+        if (play.possession === "us") {
+          const who = player ? player.name : "the ball carrier";
+          return `${who} fumbled, recovered by ${defendingTeam}${retClause}.${td}`;
+        }
+        const who = player ? player.name : defendingTeam;
+        return `${actingTeam} fumbled, recovered by ${who}${retClause}.${td}`;
+      }
+    case "punt":
+      {
+        const punter = passer ? passer.name : `${possessive(actingTeam)} punter`;
+        const dist = play.yards || 0;
+        const ret = play.returnYards || 0;
+        const landingSpot = formatYardLine(clamp(play.possession === "us" ? ctx.before.ballOn + dist : ctx.before.ballOn - dist, 0, fieldLength), fieldLength);
+        let sentence = `${punter} punted ${dist} ${plural(dist)}, from the ${beforeSpot} to the ${landingSpot}`;
+        if (ret > 0) {
+          const returner = player ? player.name : defendingTeam;
+          sentence += `, returned ${ret} ${plural(ret)} by ${returner} to the ${afterSpot}`;
+        }
+        return sentence + `.${td}`;
+      }
+    case "penalty":
+      {
+        const yards = play.yards || 0;
+        const onTeam = play.on === "us" ? team.name : opponent;
+        return `Penalty on ${onTeam}, ${yards} ${plural(yards)}. Ball placed at the ${afterSpot}.`;
+      }
+    case "turnover_on_downs":
+      return `Turnover on downs at the ${afterSpot}. ${defendingTeam} takes over.`;
+    case "safety":
+      return `Safety! ${actingTeam} tackled behind their own goal line. ${defendingTeam} scores 2 points.`;
+    case "pat1":
+    case "pat2":
+      {
+        const pts = play.type === "pat2" ? "Two-point" : "One-point";
+        if (play.result === "good") {
+          let who = "";
+          if (play.scoringPlayType === "pass" && passer && player) who = ` — ${passer.name} to ${player.name}`;else if (play.scoringPlayType === "pass" && passer) who = ` — pass from ${passer.name}`;else if (player) who = ` — ${player.name} ran it in`;
+          return `${pts} conversion attempt is GOOD${who}.`;
+        }
+        return `${pts} conversion attempt is NO GOOD.`;
+      }
+    case "qb_change":
+      return player ? `${player.name} is now in at quarterback.` : "Quarterback change.";
+    case "possession_change":
+      return `Change of possession. ${actingTeam === team.name ? opponent : team.name} takes over at the ${afterSpot}.`;
+    case "quarter_end":
+      return `End of ${formatQuarterLabel(play.quarter || 1)}.`;
+    case "touchdown":
+      // Retired play type, kept only so old logged games still read sensibly.
+      return `${player ? player.name : actingTeam} scored a touchdown!`;
+    default:
+      return PLAY_LABELS[play.type] || play.type;
+  }
+}
 function PlayLogRow({
   play,
+  ctx,
   roster,
   team,
   opponent,
   scoringPlayIds,
   onDelete
 }) {
-  const player = roster.find(p => p.id === play.playerId);
-  const passer = roster.find(p => p.id === play.passerId);
-  const label = PLAY_LABELS[play.type] || play.type;
   const scored = scoringPlayIds ? scoringPlayIds.has(play.id) : play.type === "touchdown";
-  const isTackle = ["run", "pass_complete"].includes(play.type) && play.possession === "them" && player;
-  const isSackBy = play.type === "sack" && play.possession === "them" && player;
+  const narrative = ctx ? buildPlayNarrative(play, ctx, team, opponent, roster, scored) : PLAY_LABELS[play.type] || play.type;
   return /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between text-sm bg-panel border border-soft-5 rounded-lg px-4 py-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-muted-4 font-mono w-10 shrink-0 text-xs"
   }, formatQuarterLabel(play.quarter || 1)), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
-  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", isTackle ? " (tackle)" : "", isSackBy ? " (sack)" : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : play.type === "punt" ? " punt" : ""}` : "", play.type === "punt" && typeof play.returnYards === "number" && play.returnYards > 0 ? ` · ${play.returnYards} yd return` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
+  }, narrative), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
@@ -2762,6 +2994,7 @@ function GameSummary({
   const settings = game.teamSettings;
   const derived = useMemo(() => computeState(game), [game]);
   const scoringPlayIds = useMemo(() => new Set(computeScoringPlays(game).map(s => s.playId)), [game]);
+  const playContexts = useMemo(() => computePlayContexts(game), [game]);
   const stats = useMemo(() => computePlayerStats(game), [game]);
   const qbStats = useMemo(() => computeQBStats(game), [game]);
   const rosterById = Object.fromEntries((settings.roster || []).map(p => [p.id, p]));
@@ -2843,8 +3076,8 @@ function GameSummary({
       const player = rosterById[p.playerId];
       const passer = rosterById[p.passerId];
       const label = PLAY_LABELS[p.type] || p.type;
-      const who = p.type === "pass_complete" && passer ? `${passer.name} \u2192 ${player ? player.name : ""}` : player ? player.name : passer ? passer.name : "";
-      const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", p.type === "punt" && typeof p.returnYards === "number" && p.returnYards > 0 ? `${p.returnYards} yd return` : "", (p.type === "run" || p.type === "pass_complete") && p.possession === "them" && player ? "tackle" : "", p.type === "sack" && p.possession === "them" && player ? "sack" : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
+      const who = (p.type === "pass_complete" || (p.type === "pat1" || p.type === "pat2") && p.passerId) && passer ? `${passer.name} \u2192 ${player ? player.name : ""}` : player ? player.name : passer ? passer.name : "";
+      const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", p.type === "punt" && typeof p.returnYards === "number" && p.returnYards > 0 ? `${p.returnYards} yd return` : "", (p.type === "run" || p.type === "pass_complete") && p.possession === "them" && player ? "tackle" : "", p.type === "sack" && p.possession === "them" && player ? "sack" : "", (p.type === "pat1" || p.type === "pat2") && p.scoringPlayType ? p.scoringPlayType === "pass" ? "Pass" : "Run" : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
       rows.push([formatQuarterLabel(p.quarter || 1), label, who, typeof p.yards === "number" ? p.yards : "", notes]);
     });
     downloadCSV(`${settings.name.replace(/\s+/g, "_")}_vs_${game.opponent.replace(/\s+/g, "_")}_${game.date}.csv`, rows);
@@ -3096,6 +3329,7 @@ function GameSummary({
   }, game.plays.map(p => /*#__PURE__*/React.createElement(PlayLogRow, {
     key: p.id,
     play: p,
+    ctx: playContexts[p.id],
     roster: settings.roster,
     team: settings,
     opponent: game.opponent,
@@ -3152,7 +3386,7 @@ function SeasonStats({
   const rosterById = Object.fromEntries((team.roster || []).map(p => [p.id, p]));
   const playerTotals = useMemo(() => {
     const totals = {};
-    const STAT_KEYS = ["rushAtt", "rushYards", "rushTDs", "rec", "recYards", "recTDs", "turnovers", "tackles", "sacks", "interceptions", "interceptionReturnYards", "fumbleRecoveries", "fumbleReturnYards", "defTDs", "punts", "puntYards", "puntReturns", "puntReturnYards"];
+    const STAT_KEYS = ["rushAtt", "rushYards", "rushTDs", "rec", "recYards", "recTDs", "turnovers", "tackles", "sacks", "interceptions", "interceptionReturnYards", "fumbleRecoveries", "fumbleReturnYards", "defTDs", "punts", "puntYards", "puntReturns", "puntReturnYards", "twoPtConv"];
     const emptyTotal = () => {
       const o = {
         games: new Set()
@@ -3526,7 +3760,7 @@ function Field({
   children
 }) {
   return /*#__PURE__*/React.createElement("div", {
-    className: "mb-0"
+    className: "mb-4"
   }, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
   }, label), children);
