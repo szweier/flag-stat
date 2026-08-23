@@ -905,6 +905,7 @@ table { border-collapse: collapse; }
 .w-8 { width: 2rem; }
 .w-14 { width: 3.5rem; }
 .w-16 { width: 4rem; }
+.w-20 { width: 5rem; }
 .w-6 { width: 1.5rem; }
 .w-9 { width: 2.25rem; }
 .w-full { width: 100%; }
@@ -1907,9 +1908,11 @@ function RosterEditor({
     className: "flex space-x-2 mb-6"
   }, /*#__PURE__*/React.createElement("input", {
     value: number,
-    onChange: e => setNumber(e.target.value),
+    onChange: e => setNumber(e.target.value.replace(/\D/g, "").slice(0, 3)),
     placeholder: "#",
-    className: `${inputCls} w-16`
+    inputMode: "numeric",
+    maxLength: 3,
+    className: `${inputCls} w-20 text-center`
   }), /*#__PURE__*/React.createElement("input", {
     value: name,
     onChange: e => setName(e.target.value),
@@ -1930,8 +1933,11 @@ function RosterEditor({
     className: "flex items-center space-x-2"
   }, /*#__PURE__*/React.createElement("input", {
     value: editNumber,
-    onChange: e => setEditNumber(e.target.value),
-    className: `${inputCls} w-16 py-2`
+    onChange: e => setEditNumber(e.target.value.replace(/\D/g, "").slice(0, 3)),
+    placeholder: "#",
+    inputMode: "numeric",
+    maxLength: 3,
+    className: `${inputCls} w-20 text-center py-2`
   }), /*#__PURE__*/React.createElement("input", {
     value: editName,
     onChange: e => setEditName(e.target.value),
