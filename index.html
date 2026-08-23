@@ -568,36 +568,82 @@ function computeScoringPlays(game) {
   }
   return scores;
 }
+function emptyPlayerStats() {
+  return {
+    rushAtt: 0,
+    rushYards: 0,
+    rushTDs: 0,
+    rec: 0,
+    recYards: 0,
+    recTDs: 0,
+    turnovers: 0,
+    tackles: 0,
+    sacks: 0,
+    interceptions: 0,
+    interceptionReturnYards: 0,
+    fumbleRecoveries: 0,
+    fumbleReturnYards: 0,
+    defTDs: 0,
+    punts: 0,
+    puntYards: 0,
+    puntReturns: 0,
+    puntReturnYards: 0
+  };
+}
 function computePlayerStats(game) {
   const scoringPlays = computeScoringPlays(game);
   const scoringByPlayId = new Map(scoringPlays.map(s => [s.playId, s]));
   const totals = {};
   const bump = id => {
-    totals[id] = totals[id] || {
-      yards: 0,
-      tds: 0,
-      touches: 0,
-      turnovers: 0
-    };
+    totals[id] = totals[id] || emptyPlayerStats();
     return totals[id];
   };
   for (const p of game.plays) {
+    const scored = scoringByPlayId.get(p.id);
+    const weScored = scored && scored.possession === "us";
     if (p.playerId) {
-      if (typeof p.yards === "number" && ["run", "pass_complete", "sack"].includes(p.type)) bump(p.playerId).yards += p.yards;
-      if (["run", "pass_complete"].includes(p.type)) bump(p.playerId).touches += 1;
+      if (p.possession === "us") {
+        // Our own ball carrier / receiver — offensive production, split by
+        // how it happened rather than blended into one generic stat.
+        if (p.type === "run") {
+          bump(p.playerId).rushAtt += 1;
+          if (typeof p.yards === "number") bump(p.playerId).rushYards += p.yards;
+          if (weScored) bump(p.playerId).rushTDs += 1;
+        } else if (p.type === "pass_complete") {
+          bump(p.playerId).rec += 1;
+          if (typeof p.yards === "number") bump(p.playerId).recYards += p.yards;
+          if (weScored) bump(p.playerId).recTDs += 1;
+        }
+      } else if (p.possession === "them") {
+        // The other team had the ball, so a playerId here is one of ours
+        // making the defensive stop — crediting them with the opponent's
+        // positive yardage would be exactly backwards. A score here is a
+        // defensive/special-teams touchdown, not a rushTD/recTD.
+        if (["run", "pass_complete"].includes(p.type)) bump(p.playerId).tackles += 1;else if (p.type === "sack") bump(p.playerId).sacks += 1;else if (p.type === "interception") {
+          bump(p.playerId).interceptions += 1;
+          if (typeof p.yards === "number") bump(p.playerId).interceptionReturnYards += p.yards;
+          if (weScored) bump(p.playerId).defTDs += 1;
+        } else if (p.type === "fumble") {
+          bump(p.playerId).fumbleRecoveries += 1;
+          if (typeof p.yards === "number") bump(p.playerId).fumbleReturnYards += p.yards;
+          if (weScored) bump(p.playerId).defTDs += 1;
+        } else if (p.type === "punt") {
+          bump(p.playerId).puntReturns += 1;
+          if (typeof p.returnYards === "number") bump(p.playerId).puntReturnYards += p.returnYards;
+          if (weScored) bump(p.playerId).defTDs += 1;
+        }
+      }
+    }
+    if (p.passerId && p.possession === "us" && p.type === "punt") {
+      // We punted — passerId slot holds the punter for this play type.
+      bump(p.passerId).punts += 1;
+      if (typeof p.yards === "number") bump(p.passerId).puntYards += p.yards;
     }
     // A turnover only counts against one of our players when WE gave the
     // ball away — crediting a "turnover" to the defender who intercepted
     // or recovered it would be backwards, since that's a good play for us.
     if (p.type === "interception" && p.possession === "us" && p.passerId) bump(p.passerId).turnovers += 1;
     if (p.type === "fumble" && p.possession === "us" && p.playerId) bump(p.playerId).turnovers += 1;
-    const scored = scoringByPlayId.get(p.id);
-    if (scored && scored.possession === "us" && p.playerId) {
-      // Credit the TD to the receiver on a pass, the ball carrier on a run,
-      // the returner on a defensive score, or the coach-named scorer on an
-      // old, pre-automatic-detection touchdown entry.
-      bump(p.playerId).tds += 1;
-    }
   }
   return totals;
 }
@@ -2434,13 +2480,15 @@ function PlayLogRow({
   const passer = roster.find(p => p.id === play.passerId);
   const label = PLAY_LABELS[play.type] || play.type;
   const scored = scoringPlayIds ? scoringPlayIds.has(play.id) : play.type === "touchdown";
+  const isTackle = ["run", "pass_complete"].includes(play.type) && play.possession === "them" && player;
+  const isSackBy = play.type === "sack" && play.possession === "them" && player;
   return /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between text-sm bg-panel border border-soft-5 rounded-lg px-4 py-3"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-muted-4 font-mono w-9 shrink-0 text-xs"
   }, "Q", play.quarter || 1), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
-  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : play.type === "punt" ? " punt" : ""}` : "", play.type === "punt" && typeof play.returnYards === "number" && play.returnYards > 0 ? ` · ${play.returnYards} yd return` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
+  }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", isTackle ? " (tackle)" : "", isSackBy ? " (sack)" : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : play.type === "punt" ? " punt" : ""}` : "", play.type === "punt" && typeof play.returnYards === "number" && play.returnYards > 0 ? ` · ${play.returnYards} yd return` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
     className: "text-gold shrink-0 mr-2"
   }), onDelete && /*#__PURE__*/React.createElement("button", {
@@ -2475,7 +2523,10 @@ function PlayFormModal({
   // for our team's actual involvement: our offense when we have the ball,
   // or our defense making a takeaway (interception / fumble recovery) when
   // the other team has it. Everything else the opponent does — their run,
-  // their pass, their sack — is just yards, no player.
+  // their pass, their sack — is just yards, no player. The exception is
+  // when it's the other team's run/pass/sack: we don't care who carried
+  // the ball for them, but we do want to know which of our players made
+  // the stop, so that becomes a tackle (or sack) credit instead.
   let needsPlayer = baseMeta.needsPlayer;
   let needsPasser = baseMeta.needsPasser;
   let playerLabel = baseMeta.playerLabel;
@@ -2484,9 +2535,13 @@ function PlayFormModal({
     needsPasser = isOurBall; // passer/punter is ours only when WE had the ball
   } else if (draft.type === "fumble") {
     playerLabel = isOurBall ? "Who fumbled" : "Who recovered it";
-  } else if (["run", "pass_complete", "pass_incomplete", "sack"].includes(draft.type) && !isOurBall) {
+  } else if (draft.type === "pass_incomplete" && !isOurBall) {
     needsPlayer = false;
     needsPasser = false;
+  } else if (["run", "pass_complete", "sack"].includes(draft.type) && !isOurBall) {
+    needsPlayer = true;
+    needsPasser = false;
+    playerLabel = draft.type === "sack" ? "Sacked by" : "Tackled by";
   }
 
   // For a chained fumble (the "fumbled after this play?" toggle): figure
@@ -2659,10 +2714,24 @@ function GameSummary({
   const rosterById = Object.fromEntries((settings.roster || []).map(p => [p.id, p]));
   const presentRoster = (settings.roster || []).filter(p => (game.presentIds || []).includes(p.id));
   const fullPlayerRows = [...presentRoster].sort((a, b) => {
-    var _stats$a$id, _stats$b$id;
-    const ay = ((_stats$a$id = stats[a.id]) === null || _stats$a$id === void 0 ? void 0 : _stats$a$id.yards) || 0,
-      by = ((_stats$b$id = stats[b.id]) === null || _stats$b$id === void 0 ? void 0 : _stats$b$id.yards) || 0;
+    var _stats$a$id, _stats$a$id2, _stats$b$id, _stats$b$id2;
+    const ay = (((_stats$a$id = stats[a.id]) === null || _stats$a$id === void 0 ? void 0 : _stats$a$id.rushYards) || 0) + (((_stats$a$id2 = stats[a.id]) === null || _stats$a$id2 === void 0 ? void 0 : _stats$a$id2.recYards) || 0);
+    const by = (((_stats$b$id = stats[b.id]) === null || _stats$b$id === void 0 ? void 0 : _stats$b$id.rushYards) || 0) + (((_stats$b$id2 = stats[b.id]) === null || _stats$b$id2 === void 0 ? void 0 : _stats$b$id2.recYards) || 0);
     return by - ay;
+  });
+  const defenseRows = presentRoster.filter(p => {
+    const s = stats[p.id];
+    return s && (s.tackles > 0 || s.sacks > 0 || s.interceptions > 0 || s.fumbleRecoveries > 0);
+  }).sort((a, b) => {
+    var _stats$b$id3, _stats$a$id3;
+    return (((_stats$b$id3 = stats[b.id]) === null || _stats$b$id3 === void 0 ? void 0 : _stats$b$id3.tackles) || 0) - (((_stats$a$id3 = stats[a.id]) === null || _stats$a$id3 === void 0 ? void 0 : _stats$a$id3.tackles) || 0);
+  });
+  const specialTeamsRows = presentRoster.filter(p => {
+    const s = stats[p.id];
+    return s && (s.punts > 0 || s.puntReturns > 0);
+  }).sort((a, b) => {
+    var _stats$b$id4, _stats$a$id4;
+    return (((_stats$b$id4 = stats[b.id]) === null || _stats$b$id4 === void 0 ? void 0 : _stats$b$id4.punts) || 0) - (((_stats$a$id4 = stats[a.id]) === null || _stats$a$id4 === void 0 ? void 0 : _stats$a$id4.punts) || 0);
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
@@ -2681,16 +2750,11 @@ function GameSummary({
     rows.push(["Date", game.date]);
     rows.push(["Final score", `${settings.name} ${derived.score.us} - ${derived.score.them} ${game.opponent}`]);
     rows.push([]);
-    rows.push(["Player stats"]);
-    rows.push(["Player", "Touches", "Yards", "TDs", "Turnovers"]);
+    rows.push(["Offense"]);
+    rows.push(["Player", "Rush Att", "Rush Yds", "Rush TD", "Rec", "Rec Yds", "Rec TD", "Turnovers"]);
     fullPlayerRows.forEach(p => {
-      const s = stats[p.id] || {
-        touches: 0,
-        yards: 0,
-        tds: 0,
-        turnovers: 0
-      };
-      rows.push([p.name, s.touches, s.yards, s.tds, s.turnovers]);
+      const s = stats[p.id] || emptyPlayerStats();
+      rows.push([p.name, s.rushAtt, s.rushYards, s.rushTDs, s.rec, s.recYards, s.recTDs, s.turnovers]);
     });
     if (Object.keys(qbStats).length > 0) {
       rows.push([]);
@@ -2701,6 +2765,24 @@ function GameSummary({
         rows.push([((_rosterById$pid = rosterById[pid]) === null || _rosterById$pid === void 0 ? void 0 : _rosterById$pid.name) || "Unknown", s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
       });
     }
+    if (defenseRows.length > 0) {
+      rows.push([]);
+      rows.push(["Defense"]);
+      rows.push(["Player", "Tackles", "Sacks", "INT", "INT Return Yds", "Fumble Rec", "Fumble Return Yds", "Def TDs"]);
+      defenseRows.forEach(p => {
+        const s = stats[p.id] || emptyPlayerStats();
+        rows.push([p.name, s.tackles, s.sacks, s.interceptions, s.interceptionReturnYards, s.fumbleRecoveries, s.fumbleReturnYards, s.defTDs]);
+      });
+    }
+    if (specialTeamsRows.length > 0) {
+      rows.push([]);
+      rows.push(["Special Teams"]);
+      rows.push(["Player", "Punts", "Punt Yds", "Punt Avg", "Punt Returns", "Punt Return Yds"]);
+      specialTeamsRows.forEach(p => {
+        const s = stats[p.id] || emptyPlayerStats();
+        rows.push([p.name, s.punts, s.puntYards, s.punts ? (s.puntYards / s.punts).toFixed(1) : "0.0", s.puntReturns, s.puntReturnYards]);
+      });
+    }
     rows.push([]);
     rows.push(["Full play-by-play"]);
     rows.push(["Quarter", "Play", "Player", "Yards", "Notes"]);
@@ -2709,7 +2791,7 @@ function GameSummary({
       const passer = rosterById[p.passerId];
       const label = PLAY_LABELS[p.type] || p.type;
       const who = p.type === "pass_complete" && passer ? `${passer.name} \u2192 ${player ? player.name : ""}` : player ? player.name : passer ? passer.name : "";
-      const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
+      const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", p.type === "punt" && typeof p.returnYards === "number" && p.returnYards > 0 ? `${p.returnYards} yd return` : "", (p.type === "run" || p.type === "pass_complete") && p.possession === "them" && player ? "tackle" : "", p.type === "sack" && p.possession === "them" && player ? "sack" : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
       rows.push([`Q${p.quarter || 1}`, label, who, typeof p.yards === "number" ? p.yards : "", notes]);
     });
     downloadCSV(`${settings.name.replace(/\s+/g, "_")}_vs_${game.opponent.replace(/\s+/g, "_")}_${game.date}.csv`, rows);
@@ -2828,7 +2910,7 @@ function GameSummary({
     }, s.sacks));
   }))))), fullPlayerRows.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
-  }, "Player stats"), /*#__PURE__*/React.createElement("p", {
+  }, "Offense"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-muted-5 mb-2.5 no-print"
   }, "Every player marked present for this game, including anyone with zero touches."), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-6 overflow-x-auto"
@@ -2840,19 +2922,20 @@ function GameSummary({
     className: "text-left px-4 py-3"
   }, "Player"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Touches"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Yards"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "TDs"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush TD"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Rec"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Rec Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Rec TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, fullPlayerRows.map(p => {
-    const s = stats[p.id] || {
-      touches: 0,
-      yards: 0,
-      tds: 0,
-      turnovers: 0
-    };
+    const s = stats[p.id] || emptyPlayerStats();
     return /*#__PURE__*/React.createElement("tr", {
       key: p.id,
       className: "border-t border-soft-5"
@@ -2860,13 +2943,97 @@ function GameSummary({
       className: "px-4 py-3 font-medium"
     }, p.name), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.touches), /*#__PURE__*/React.createElement("td", {
+    }, s.rushAtt), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.yards), /*#__PURE__*/React.createElement("td", {
+    }, s.rushYards), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.tds), /*#__PURE__*/React.createElement("td", {
+    }, s.rushTDs), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.rec), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.recYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.recTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
+  }))))), defenseRows.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+  }, "Defense"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-muted-5 mb-2.5 no-print"
+  }, "Tackles, sacks, interceptions, and fumble recoveries logged while the opponent had the ball."), /*#__PURE__*/React.createElement("div", {
+    className: "card-panel overflow-hidden mb-6 overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "w-full text-sm"
+  }, /*#__PURE__*/React.createElement("thead", {
+    className: "bg-overlay-5 text-muted-3 text-xs uppercase"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-4 py-3"
+  }, "Player"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Tkl"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Sck"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "INT"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "FR"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Def TD"))), /*#__PURE__*/React.createElement("tbody", null, defenseRows.map(p => {
+    const s = stats[p.id] || emptyPlayerStats();
+    return /*#__PURE__*/React.createElement("tr", {
+      key: p.id,
+      className: "border-t border-soft-5"
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 font-medium"
+    }, p.name), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.tackles), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.sacks), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.interceptions), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.fumbleRecoveries), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.defTDs));
+  }))))), specialTeamsRows.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+  }, "Special Teams"), /*#__PURE__*/React.createElement("div", {
+    className: "card-panel overflow-hidden mb-6 overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "w-full text-sm"
+  }, /*#__PURE__*/React.createElement("thead", {
+    className: "bg-overlay-5 text-muted-3 text-xs uppercase"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-4 py-3"
+  }, "Player"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Punts"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Punt Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Ret"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Ret Yds"))), /*#__PURE__*/React.createElement("tbody", null, specialTeamsRows.map(p => {
+    const s = stats[p.id] || emptyPlayerStats();
+    return /*#__PURE__*/React.createElement("tr", {
+      key: p.id,
+      className: "border-t border-soft-5"
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 font-medium"
+    }, p.name), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.punts), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.punts ? (s.puntYards / s.punts).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntReturns), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntReturnYards));
   }))))), /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold no-print"
   }, "Full play-by-play"), /*#__PURE__*/React.createElement("p", {
@@ -2932,14 +3099,16 @@ function SeasonStats({
   const rosterById = Object.fromEntries((team.roster || []).map(p => [p.id, p]));
   const playerTotals = useMemo(() => {
     const totals = {};
-    for (const p of team.roster || []) {
-      totals[p.id] = {
-        yards: 0,
-        tds: 0,
-        touches: 0,
-        turnovers: 0,
+    const STAT_KEYS = ["rushAtt", "rushYards", "rushTDs", "rec", "recYards", "recTDs", "turnovers", "tackles", "sacks", "interceptions", "interceptionReturnYards", "fumbleRecoveries", "fumbleReturnYards", "defTDs", "punts", "puntYards", "puntReturns", "puntReturnYards"];
+    const emptyTotal = () => {
+      const o = {
         games: new Set()
       };
+      STAT_KEYS.forEach(k => o[k] = 0);
+      return o;
+    };
+    for (const p of team.roster || []) {
+      totals[p.id] = emptyTotal();
     }
     for (const g of games) {
       if (g.status !== "final") continue;
@@ -2948,17 +3117,8 @@ function SeasonStats({
       }
       const gameTotals = computePlayerStats(g);
       for (const [pid, s] of Object.entries(gameTotals)) {
-        if (!totals[pid]) totals[pid] = {
-          yards: 0,
-          tds: 0,
-          touches: 0,
-          turnovers: 0,
-          games: new Set()
-        };
-        totals[pid].yards += s.yards;
-        totals[pid].tds += s.tds;
-        totals[pid].touches += s.touches;
-        totals[pid].turnovers += s.turnovers;
+        if (!totals[pid]) totals[pid] = emptyTotal();
+        STAT_KEYS.forEach(k => totals[pid][k] += s[k] || 0);
       }
     }
     return totals;
@@ -2990,13 +3150,19 @@ function SeasonStats({
     return totals;
   }, [games]);
   const sortedQBIds = Object.keys(qbTotals).sort((a, b) => qbTotals[b].passYards - qbTotals[a].passYards);
-  const sortedIds = Object.keys(playerTotals).sort((a, b) => playerTotals[b].yards - playerTotals[a].yards);
+  const sortedIds = Object.keys(playerTotals).sort((a, b) => {
+    const ay = playerTotals[a].rushYards + playerTotals[a].recYards;
+    const by = playerTotals[b].rushYards + playerTotals[b].recYards;
+    return by - ay;
+  });
+  const sortedDefenseIds = Object.keys(playerTotals).filter(pid => playerTotals[pid].tackles > 0 || playerTotals[pid].sacks > 0 || playerTotals[pid].interceptions > 0 || playerTotals[pid].fumbleRecoveries > 0).sort((a, b) => playerTotals[b].tackles - playerTotals[a].tackles);
+  const sortedSpecialTeamsIds = Object.keys(playerTotals).filter(pid => playerTotals[pid].punts > 0 || playerTotals[pid].puntReturns > 0).sort((a, b) => playerTotals[b].punts - playerTotals[a].punts);
   function exportCSV() {
-    const rows = [["Player", "Games Played", "Touches", "Yards", "Yards/Touch", "TDs", "Turnovers"]];
+    const rows = [["Player", "Games Played", "Rush Att", "Rush Yds", "Rush TD", "Rec", "Rec Yds", "Rec TD", "Turnovers"]];
     sortedIds.forEach(pid => {
       var _rosterById$pid3;
       const s = playerTotals[pid];
-      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.touches, s.yards, s.touches ? (s.yards / s.touches).toFixed(1) : "0.0", s.tds, s.turnovers]);
+      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.rushAtt, s.rushYards, s.rushTDs, s.rec, s.recYards, s.recTDs, s.turnovers]);
     });
     rows.push([]);
     rows.push(["QB", "Games Played", "Completions", "Attempts", "Pass Yards", "Pass TDs", "INTs", "Sacks"]);
@@ -3004,6 +3170,20 @@ function SeasonStats({
       var _rosterById$pid4;
       const s = qbTotals[pid];
       rows.push([((_rosterById$pid4 = rosterById[pid]) === null || _rosterById$pid4 === void 0 ? void 0 : _rosterById$pid4.name) || "Unknown", s.games.size, s.completions, s.attempts, s.passYards, s.passTDs, s.ints, s.sacks]);
+    });
+    rows.push([]);
+    rows.push(["Defense", "Games Played", "Tackles", "Sacks", "INT", "INT Return Yds", "Fumble Rec", "Fumble Return Yds", "Def TDs"]);
+    sortedDefenseIds.forEach(pid => {
+      var _rosterById$pid5;
+      const s = playerTotals[pid];
+      rows.push([((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown", s.games.size, s.tackles, s.sacks, s.interceptions, s.interceptionReturnYards, s.fumbleRecoveries, s.fumbleReturnYards, s.defTDs]);
+    });
+    rows.push([]);
+    rows.push(["Special Teams", "Games Played", "Punts", "Punt Yds", "Punt Avg", "Punt Returns", "Punt Return Yds"]);
+    sortedSpecialTeamsIds.forEach(pid => {
+      var _rosterById$pid6;
+      const s = playerTotals[pid];
+      rows.push([((_rosterById$pid6 = rosterById[pid]) === null || _rosterById$pid6 === void 0 ? void 0 : _rosterById$pid6.name) || "Unknown", s.games.size, s.punts, s.puntYards, s.punts ? (s.puntYards / s.punts).toFixed(1) : "0.0", s.puntReturns, s.puntReturnYards]);
     });
     rows.push([]);
     rows.push(["Date", "Opponent", "Result", "Score"]);
@@ -3075,14 +3255,14 @@ function SeasonStats({
   }, "INTs"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Sacks"))), /*#__PURE__*/React.createElement("tbody", null, sortedQBIds.map(pid => {
-    var _rosterById$pid5;
+    var _rosterById$pid7;
     const s = qbTotals[pid];
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid5 = rosterById[pid]) === null || _rosterById$pid5 === void 0 ? void 0 : _rosterById$pid5.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid7 = rosterById[pid]) === null || _rosterById$pid7 === void 0 ? void 0 : _rosterById$pid7.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3097,7 +3277,7 @@ function SeasonStats({
     }, s.sacks));
   }))))), !loading && sortedIds.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
-  }, "Season stat leaders"), /*#__PURE__*/React.createElement("div", {
+  }, "Season offense"), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-8 overflow-x-auto"
   }, /*#__PURE__*/React.createElement("table", {
     className: "w-full text-sm"
@@ -3109,36 +3289,129 @@ function SeasonStats({
     className: "text-right px-4 py-3"
   }, "GP"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Touches"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Yards"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "YPT"), /*#__PURE__*/React.createElement("th", {
+  }, "Rush TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "TDs"), /*#__PURE__*/React.createElement("th", {
+  }, "Rec"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Rec Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Rec TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, sortedIds.map(pid => {
-    var _rosterById$pid6;
+    var _rosterById$pid8;
     const s = playerTotals[pid];
-    const ypt = s.touches ? (s.yards / s.touches).toFixed(1) : "0.0";
     return /*#__PURE__*/React.createElement("tr", {
       key: pid,
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid6 = rosterById[pid]) === null || _rosterById$pid6 === void 0 ? void 0 : _rosterById$pid6.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, ((_rosterById$pid8 = rosterById[pid]) === null || _rosterById$pid8 === void 0 ? void 0 : _rosterById$pid8.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.touches), /*#__PURE__*/React.createElement("td", {
+    }, s.rushAtt), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.yards), /*#__PURE__*/React.createElement("td", {
+    }, s.rushYards), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, ypt), /*#__PURE__*/React.createElement("td", {
+    }, s.rushTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
-    }, s.tds), /*#__PURE__*/React.createElement("td", {
+    }, s.rec), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.recYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.recTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.turnovers));
+  }))))), !loading && sortedDefenseIds.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+  }, "Season defense"), /*#__PURE__*/React.createElement("div", {
+    className: "card-panel overflow-hidden mb-8 overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "w-full text-sm"
+  }, /*#__PURE__*/React.createElement("thead", {
+    className: "bg-overlay-5 text-muted-3 text-xs uppercase"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-4 py-3"
+  }, "Player"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "GP"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Tkl"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Sck"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "INT"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "FR"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Def TD"))), /*#__PURE__*/React.createElement("tbody", null, sortedDefenseIds.map(pid => {
+    var _rosterById$pid9;
+    const s = playerTotals[pid];
+    return /*#__PURE__*/React.createElement("tr", {
+      key: pid,
+      className: "border-t border-soft-5"
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 font-medium"
+    }, ((_rosterById$pid9 = rosterById[pid]) === null || _rosterById$pid9 === void 0 ? void 0 : _rosterById$pid9.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.games.size), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.tackles), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.sacks), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.interceptions), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.fumbleRecoveries), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.defTDs));
+  }))))), !loading && sortedSpecialTeamsIds.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+  }, "Season special teams"), /*#__PURE__*/React.createElement("div", {
+    className: "card-panel overflow-hidden mb-8 overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "w-full text-sm"
+  }, /*#__PURE__*/React.createElement("thead", {
+    className: "bg-overlay-5 text-muted-3 text-xs uppercase"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-4 py-3"
+  }, "Player"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "GP"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Punts"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Punt Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Ret"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Ret Yds"))), /*#__PURE__*/React.createElement("tbody", null, sortedSpecialTeamsIds.map(pid => {
+    var _rosterById$pid0;
+    const s = playerTotals[pid];
+    return /*#__PURE__*/React.createElement("tr", {
+      key: pid,
+      className: "border-t border-soft-5"
+    }, /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 font-medium"
+    }, ((_rosterById$pid0 = rosterById[pid]) === null || _rosterById$pid0 === void 0 ? void 0 : _rosterById$pid0.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.games.size), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.punts), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.punts ? (s.puntYards / s.punts).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntReturns), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.puntReturnYards));
   }))))), !loading && sortedIds.length === 0 && sortedQBIds.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-8"
   }, "No completed games with logged plays yet this season."), /*#__PURE__*/React.createElement("p", {
