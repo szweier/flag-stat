@@ -2426,7 +2426,6 @@ function ChangeBallModal({
 function FieldVisual({
   length,
   ballOn,
-  possession,
   setStartYard,
   firstDownMode
 }) {
@@ -2466,7 +2465,7 @@ function FieldVisual({
     }
   }, yardLineLabel)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between text-xs font-mono text-muted-4 mt-0.5"
-  }, /*#__PURE__*/React.createElement("span", null, possession === "us" ? "your goal" : "their goal"), /*#__PURE__*/React.createElement("span", null, "midfield"), /*#__PURE__*/React.createElement("span", null, possession === "us" ? "their goal" : "your goal")));
+  }, /*#__PURE__*/React.createElement("span", null, "your goal"), /*#__PURE__*/React.createElement("span", null, "midfield"), /*#__PURE__*/React.createElement("span", null, "their goal")));
 }
 function PlayLogRow({
   play,
