@@ -1185,6 +1185,16 @@ table { border-collapse: collapse; }
     outline: none; transition: border-color 0.15s ease;
   }
   .field-input:focus { border-color: #E8B33D; }
+
+  /* Sized precisely for a jersey number (max 3 digits) — the default
+     .field-input padding (1rem each side) was eating most of a "just big
+     enough" width, so this uses tighter padding instead of a wider box. */
+  .field-input-number {
+    width: 3.25rem; background: #14171F; border: 1.5px solid rgba(255,255,255,0.15);
+    border-radius: 0.7rem; padding: 0.85rem 0.4rem; font-size: 1rem; color: #EDEFE7;
+    outline: none; text-align: center; transition: border-color 0.15s ease;
+  }
+  .field-input-number:focus { border-color: #E8B33D; }
 `;
 
 // ============================================================
@@ -1912,7 +1922,7 @@ function RosterEditor({
     placeholder: "#",
     inputMode: "numeric",
     maxLength: 3,
-    className: `${inputCls} w-20 text-center`
+    className: "field-input-number"
   }), /*#__PURE__*/React.createElement("input", {
     value: name,
     onChange: e => setName(e.target.value),
@@ -1937,7 +1947,10 @@ function RosterEditor({
     placeholder: "#",
     inputMode: "numeric",
     maxLength: 3,
-    className: `${inputCls} w-20 text-center py-2`
+    className: "field-input-number",
+    style: {
+      padding: "0.5rem 0.4rem"
+    }
   }), /*#__PURE__*/React.createElement("input", {
     value: editName,
     onChange: e => setEditName(e.target.value),
