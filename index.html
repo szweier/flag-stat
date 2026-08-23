@@ -1687,7 +1687,7 @@ function TeamCard({
   }, rec.played, " played"), /*#__PURE__*/React.createElement("span", {
     className: "text-muted-4 ml-auto"
   }, rec.pf, " PF / ", rec.pa, " PA")), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5 text-sm font-semibold mb-4"
+    className: "grid grid-cols-2 sm:flex sm:flex-wrap gap-3 text-sm font-semibold mb-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => onOpenRoster(team),
     className: "btn-outline flex items-center justify-center space-x-1.5"
@@ -1920,7 +1920,7 @@ function RosterEditor({
   }, /*#__PURE__*/React.createElement(Plus, {
     size: 18
   }))), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-2.5 mb-8"
+    className: "space-y-3 mb-8"
   }, roster.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
   }, "No players added yet."), roster.map(p => /*#__PURE__*/React.createElement("div", {
@@ -2270,7 +2270,7 @@ function LiveGame({
     title: `${settings.name} vs ${game.opponent}`,
     onBack: onExit
   })), scoreboard, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mb-5 mt-4"
+    className: "grid grid-cols-2 gap-3 mb-5 mt-4"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setChangeBallOpen(true),
     className: "btn-outline flex-col space-x-1.5 text-xs py-3.5"
@@ -2886,7 +2886,7 @@ function GameSummary({
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 15
   }), " Delete game")), /*#__PURE__*/React.createElement("div", {
-    className: "flex space-x-2.5 mb-6 no-print"
+    className: "flex space-x-3 mb-6 no-print"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: exportGameCSV,
     className: "btn-outline flex-1 text-sm"
@@ -3235,7 +3235,7 @@ function SeasonStats({
   }, team.name, " — Season Stats"), /*#__PURE__*/React.createElement("p", {
     className: "text-sm"
   }, "Record: ", record.w, "-", record.l, record.t ? `-${record.t}` : "", " · ", record.pf, " points for · ", record.pa, " points against")), /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2.5 mb-6 no-print"
+    className: "grid grid-cols-3 gap-3 mb-6 no-print"
   }, /*#__PURE__*/React.createElement(StatBlock, {
     label: "Record",
     value: `${record.w}-${record.l}${record.t ? `-${record.t}` : ""}`
@@ -3246,7 +3246,7 @@ function SeasonStats({
     label: "Points against",
     value: record.pa
   })), /*#__PURE__*/React.createElement("div", {
-    className: "flex space-x-2.5 mb-6 no-print"
+    className: "flex space-x-3 mb-6 no-print"
   }, sortedIds.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: exportCSV,
     className: "btn-outline flex-1 text-sm"
