@@ -2426,11 +2426,18 @@ function ChangeBallModal({
 function FieldVisual({
   length,
   ballOn,
+  possession,
   setStartYard,
   firstDownMode
 }) {
   const pct = clamp(ballOn / length * 100, 0, 100);
   const yardLineLabel = formatYardLine(ballOn, length);
+  // "your goal" is always the left/0% end and "their goal" the right/100%
+  // end, fixed regardless of possession — so whoever has the ball is always
+  // driving toward increasing ballOn (right) if it's us, decreasing (left)
+  // if it's them.
+  const movingRight = possession === "us";
+  const arrow = movingRight ? "\u2192" : "\u2190";
   return /*#__PURE__*/React.createElement("div", {
     className: "mt-3"
   }, /*#__PURE__*/React.createElement("div", {
@@ -2463,7 +2470,7 @@ function FieldVisual({
       left: `${pct}%`,
       transform: pct < 8 ? "translateX(0)" : pct > 92 ? "translateX(-100%)" : "translateX(-50%)"
     }
-  }, yardLineLabel)), /*#__PURE__*/React.createElement("div", {
+  }, movingRight ? `${yardLineLabel} ${arrow}` : `${arrow} ${yardLineLabel}`)), /*#__PURE__*/React.createElement("div", {
     className: "flex justify-between text-xs font-mono text-muted-4 mt-0.5"
   }, /*#__PURE__*/React.createElement("span", null, "your goal"), /*#__PURE__*/React.createElement("span", null, "midfield"), /*#__PURE__*/React.createElement("span", null, "their goal")));
 }
