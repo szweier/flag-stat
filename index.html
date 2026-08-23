@@ -251,6 +251,12 @@ function decomposeYardLine(ballOn, fieldLength) {
   };
 }
 
+// Quarters 1-4 are regulation; anything past that is overtime, numbered
+// from 1 again (quarter 5 = OT1, quarter 6 = OT2, and so on).
+function formatQuarterLabel(quarter) {
+  return quarter <= 4 ? `Q${quarter}` : `OT${quarter - 4}`;
+}
+
 // ============================================================
 // game engine — plays are the single source of truth.
 // Score, down, distance, ball position, and possession are all
@@ -270,7 +276,7 @@ function applyPlayToState(state, play, settings) {
   if (play.type === "quarter_end") {
     return {
       ...state,
-      quarter: Math.min(4, quarter + 1)
+      quarter: quarter + 1
     };
   }
   if (play.type === "qb_change") {
@@ -908,6 +914,7 @@ table { border-collapse: collapse; }
 .w-20 { width: 5rem; }
 .w-6 { width: 1.5rem; }
 .w-9 { width: 2.25rem; }
+.w-10 { width: 2.5rem; }
 .w-full { width: 100%; }
 .w-px { width: 1px; }
 .h-4 { height: 1rem; }
@@ -2226,7 +2233,7 @@ function LiveGame({
     className: "font-mono text-4xl font-bold"
   }, derived.score.us)), /*#__PURE__*/React.createElement("div", {
     className: "text-muted-5 font-mono text-xs px-2 bg-ink rounded-md py-1.5"
-  }, "Q", derived.quarter), /*#__PURE__*/React.createElement("div", {
+  }, formatQuarterLabel(derived.quarter)), /*#__PURE__*/React.createElement("div", {
     className: "text-center flex-1"
   }, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-3 truncate font-semibold"
@@ -2300,7 +2307,7 @@ function LiveGame({
     className: "btn-outline flex-col space-x-1.5 text-xs py-3.5"
   }, /*#__PURE__*/React.createElement(SkipForward, {
     size: 18
-  }), " End quarter"), /*#__PURE__*/React.createElement("button", {
+  }), " ", derived.quarter < 4 ? "End quarter" : derived.quarter === 4 ? "Start overtime" : `End ${formatQuarterLabel(derived.quarter)}`), /*#__PURE__*/React.createElement("button", {
     onClick: undoLast,
     disabled: game.plays.length === 0,
     className: "btn-outline flex-col space-x-1.5 text-xs py-3.5 disabled-dim-30"
@@ -2531,8 +2538,8 @@ function PlayLogRow({
   return /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between text-sm bg-panel border border-soft-5 rounded-lg px-4 py-3"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "text-muted-4 font-mono w-9 shrink-0 text-xs"
-  }, "Q", play.quarter || 1), /*#__PURE__*/React.createElement("span", {
+    className: "text-muted-4 font-mono w-10 shrink-0 text-xs"
+  }, formatQuarterLabel(play.quarter || 1)), /*#__PURE__*/React.createElement("span", {
     className: "flex-1"
   }, label, play.type === "pass_complete" && passer ? ` · ${passer.name} → ` : play.playerId && player ? " · " : "", play.playerId && player ? player.name : "", isTackle ? " (tackle)" : "", isSackBy ? " (sack)" : "", play.type !== "pass_complete" && play.passerId && passer ? ` (${passer.name})` : "", play.type === "interception" && typeof play.airYards === "number" && play.airYards > 0 ? ` · picked ${play.airYards} yd downfield` : "", typeof play.yards === "number" && play.yards !== 0 ? ` · ${play.yards > 0 ? "+" : ""}${play.yards} yd${play.type === "interception" ? " return" : play.type === "punt" ? " punt" : ""}` : "", play.type === "punt" && typeof play.returnYards === "number" && play.returnYards > 0 ? ` · ${play.returnYards} yd return` : "", play.type === "penalty" ? ` (on ${play.on === "us" ? "us" : "opponent"})` : "", (play.type === "pat1" || play.type === "pat2") && play.spot ? ` from the ${play.spot}` : "", scored ? " · TOUCHDOWN" : ""), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
@@ -2838,7 +2845,7 @@ function GameSummary({
       const label = PLAY_LABELS[p.type] || p.type;
       const who = p.type === "pass_complete" && passer ? `${passer.name} \u2192 ${player ? player.name : ""}` : player ? player.name : passer ? passer.name : "";
       const notes = [p.type === "penalty" ? `on ${p.on === "us" ? "us" : "opponent"}` : "", p.type === "interception" && p.airYards ? `picked ${p.airYards} yd downfield` : "", p.type === "punt" && typeof p.returnYards === "number" && p.returnYards > 0 ? `${p.returnYards} yd return` : "", (p.type === "run" || p.type === "pass_complete") && p.possession === "them" && player ? "tackle" : "", p.type === "sack" && p.possession === "them" && player ? "sack" : "", scoringPlayIds.has(p.id) ? "TOUCHDOWN" : ""].filter(Boolean).join("; ");
-      rows.push([`Q${p.quarter || 1}`, label, who, typeof p.yards === "number" ? p.yards : "", notes]);
+      rows.push([formatQuarterLabel(p.quarter || 1), label, who, typeof p.yards === "number" ? p.yards : "", notes]);
     });
     downloadCSV(`${settings.name.replace(/\s+/g, "_")}_vs_${game.opponent.replace(/\s+/g, "_")}_${game.date}.csv`, rows);
   }
