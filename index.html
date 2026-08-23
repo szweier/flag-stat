@@ -1906,15 +1906,15 @@ function RosterEditor({
     onSubmit: addPlayer,
     className: "flex space-x-2 mb-6"
   }, /*#__PURE__*/React.createElement("input", {
-    value: name,
-    onChange: e => setName(e.target.value),
-    placeholder: "Player name",
-    className: `${inputCls} flex-1`
-  }), /*#__PURE__*/React.createElement("input", {
     value: number,
     onChange: e => setNumber(e.target.value),
     placeholder: "#",
     className: `${inputCls} w-16`
+  }), /*#__PURE__*/React.createElement("input", {
+    value: name,
+    onChange: e => setName(e.target.value),
+    placeholder: "Player name",
+    className: `${inputCls} flex-1`
   }), /*#__PURE__*/React.createElement("button", {
     className: "btn-primary px-5"
   }, /*#__PURE__*/React.createElement(Plus, {
@@ -1929,13 +1929,13 @@ function RosterEditor({
   }, editingId === p.id ? /*#__PURE__*/React.createElement("div", {
     className: "flex items-center space-x-2"
   }, /*#__PURE__*/React.createElement("input", {
-    value: editName,
-    onChange: e => setEditName(e.target.value),
-    className: `${inputCls} flex-1 py-2`
-  }), /*#__PURE__*/React.createElement("input", {
     value: editNumber,
     onChange: e => setEditNumber(e.target.value),
     className: `${inputCls} w-16 py-2`
+  }), /*#__PURE__*/React.createElement("input", {
+    value: editName,
+    onChange: e => setEditName(e.target.value),
+    className: `${inputCls} flex-1 py-2`
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => saveEdit(p.id),
     className: "text-green bg-green-dim rounded-lg p-2.5"
@@ -3542,7 +3542,7 @@ function ConfirmDialog({
   }, title), /*#__PURE__*/React.createElement("p", {
     className: "text-sm text-muted-2"
   }, message))), /*#__PURE__*/React.createElement("div", {
-    className: "flex space-x-2.5"
+    className: "flex space-x-3"
   }, /*#__PURE__*/React.createElement("button", {
     onClick: onCancel,
     className: "btn-outline flex-1 text-base"
