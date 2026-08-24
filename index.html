@@ -3382,11 +3382,15 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
         if (play.possession === "us") {
           const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
           const rec = player ? player.name : "a receiver";
+          if (yards < 0) return `${qb} completed a pass to ${rec}, tackled for a loss of ${Math.abs(yards)} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
+          if (yards === 0) return `${qb} completed a pass to ${rec} for no gain at the ${afterSpot}.${td}`;
           return `${qb} completed a pass to ${rec} for ${yards} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
         }
         // Same situation as an opponent run — playerId is our tackler here,
         // not their receiver, whose name we don't track.
         const tackle = player ? `, tackled by ${player.name}` : "";
+        if (yards < 0) return `${possessive(actingTeam)} pass completion${tackle ? tackle + "," : ""} lost ${Math.abs(yards)} ${plural(yards)}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
+        if (yards === 0) return `${possessive(actingTeam)} pass completion${tackle ? tackle + "," : ""} gained no yards at the ${afterSpot}.${td}`;
         return `${possessive(actingTeam)} pass completion gained ${yards} ${plural(yards)}${tackle}, from the ${beforeSpot} to the ${afterSpot}.${td}`;
       }
     case "pass_incomplete":
