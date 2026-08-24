@@ -1492,7 +1492,7 @@ function FlagStatApp() {
   const [teams, setTeams] = useState([]);
   const [activeTeam, setActiveTeam] = useState(null);
   const [activeGame, setActiveGame] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [toastQueue, setToastQueue] = useState([]);
   const online = useOnlineStatus();
   useEffect(() => auth.onAuthStateChanged(u => {
     setAuthUser(u);
@@ -1522,21 +1522,30 @@ function FlagStatApp() {
         id: d.id
       }));
       merge();
-    }, err => flash(describeFirebaseError(err, "load your teams")));
+    }, err => {
+      console.error("[owned-teams query]", err.code, err.message, err);
+      flash(describeFirebaseError(err, "load your teams"));
+    });
     const unsub2 = teamsCol().where("assistantUids", "array-contains", authUser.uid).onSnapshot(snap => {
       assisted = snap.docs.map(d => ({
         ...d.data(),
         id: d.id
       }));
       merge();
-    }, err => flash(describeFirebaseError(err, "load teams you're helping coach")));
+    }, err => {
+      console.error("[editor-teams query]", err.code, err.message, err);
+      flash(describeFirebaseError(err, "load teams you're helping coach"));
+    });
     const unsub3 = teamsCol().where("viewerUids", "array-contains", authUser.uid).onSnapshot(snap => {
       viewed = snap.docs.map(d => ({
         ...d.data(),
         id: d.id
       }));
       merge();
-    }, err => flash(describeFirebaseError(err, "load teams shared with you")));
+    }, err => {
+      console.error("[viewer-teams query]", err.code, err.message, err);
+      flash(describeFirebaseError(err, "load teams shared with you"));
+    });
     return () => {
       unsub1();
       unsub2();
@@ -1544,9 +1553,20 @@ function FlagStatApp() {
     };
   }, [authUser]);
   function flash(msg) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 5000);
+    setToastQueue(q => [...q, {
+      id: uid(),
+      msg
+    }]);
   }
+  useEffect(() => {
+    if (toastQueue.length === 0) return;
+    // Each message gets its own full display window in sequence — a
+    // second error arriving while the first is showing used to silently
+    // overwrite it, which meant a genuinely broken second query could go
+    // completely unnoticed behind whichever error happened to show last.
+    const timer = setTimeout(() => setToastQueue(q => q.slice(1)), 5000);
+    return () => clearTimeout(timer);
+  }, [toastQueue]);
   async function createDemoTeam() {
     try {
       const id = await createTeam(authUser.uid, DEMO_TEAM);
@@ -1588,12 +1608,12 @@ function FlagStatApp() {
     className: "min-h-screen bg-ink text-primary font-sans"
   }, /*#__PURE__*/React.createElement("style", null, GLOBAL_STYLES), !online && /*#__PURE__*/React.createElement("div", {
     className: "fixed top-0 inset-x-0 z-50 bg-red text-white text-xs font-semibold text-center py-2 no-print"
-  }, "You're offline — plays are saved on this device and will sync automatically once you're back online."), toast && /*#__PURE__*/React.createElement("div", {
+  }, "You're offline — plays are saved on this device and will sync automatically once you're back online."), toastQueue.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-gold text-ink px-5 py-3 rounded-lg font-semibold text-sm shadow-lg text-center",
     style: {
       maxWidth: "92vw"
     }
-  }, toast), screen === "dashboard" && /*#__PURE__*/React.createElement(Dashboard, {
+  }, toastQueue[0].msg), screen === "dashboard" && /*#__PURE__*/React.createElement(Dashboard, {
     authUser: authUser,
     teams: teams,
     flash: flash,
