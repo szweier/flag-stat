@@ -2347,7 +2347,7 @@ function TeamForm({
   })), /*#__PURE__*/React.createElement(Field, {
     label: "Field length (goal to goal, yards)"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-2"
+    className: "grid grid-cols-3 gap-3 mb-2"
   }, FIELD_LENGTHS.map(l => /*#__PURE__*/React.createElement(Chip, {
     key: l,
     active: Number(fieldLength) === l,
@@ -2361,7 +2361,7 @@ function TeamForm({
   })), /*#__PURE__*/React.createElement(Field, {
     label: "Field width (yards)"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2 mb-2"
+    className: "grid grid-cols-3 gap-3 mb-2"
   }, FIELD_WIDTHS.map(w => /*#__PURE__*/React.createElement(Chip, {
     key: w,
     active: Number(fieldWidth) === w,
@@ -2375,7 +2375,7 @@ function TeamForm({
   })), /*#__PURE__*/React.createElement(Field, {
     label: "Downs per possession"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2"
+    className: "grid grid-cols-3 gap-3"
   }, [3, 4, 5].map(n => /*#__PURE__*/React.createElement(Chip, {
     key: n,
     active: Number(numDowns) === n,
@@ -2383,7 +2383,7 @@ function TeamForm({
   }, n)))), /*#__PURE__*/React.createElement(Field, {
     label: "First-down rule"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2"
+    className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: firstDownMode === "midfield",
     onClick: () => setFirstDownMode("midfield")
@@ -2730,7 +2730,7 @@ function GameSetup({
   })), /*#__PURE__*/React.createElement(Field, {
     label: "Who starts with the ball?"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
+    className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: possession === "us",
     onClick: () => setPossession("us")
@@ -2740,7 +2740,7 @@ function GameSetup({
   }, "Opponent"))), /*#__PURE__*/React.createElement(Field, {
     label: "Players present today"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
+    className: "grid grid-cols-2 gap-3"
   }, team.roster.map(p => /*#__PURE__*/React.createElement(Chip, {
     key: p.id,
     active: presentIds.some(id => sameId(id, p.id)),
@@ -2750,7 +2750,7 @@ function GameSetup({
   }, "Add players to the roster first — you can still start without them.")), needsQB && /*#__PURE__*/React.createElement(Field, {
     label: "Starting QB"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
+    className: "grid grid-cols-2 gap-3"
   }, presentRoster.map(p => /*#__PURE__*/React.createElement(Chip, {
     key: p.id,
     active: qbId === p.id,
@@ -3160,7 +3160,7 @@ function QBPickerModal({
   }))), roster.length === 0 ? /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm mb-4"
   }, "No players marked present for this game.") : /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mb-5"
+    className: "grid grid-cols-2 gap-3 mb-5"
   }, roster.map(p => /*#__PURE__*/React.createElement(Chip, {
     key: p.id,
     active: selected === p.id,
@@ -3207,7 +3207,7 @@ function ChangeBallModal({
   }, "Where's the ball starting from? This isn't tied to a specific play — good for a punt, or anything else that moves the spot."), /*#__PURE__*/React.createElement(Field, {
     label: "Field position"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-3 gap-2.5 mb-3"
+    className: "grid grid-cols-3 gap-3 mb-3"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: side === "own",
     onClick: () => setSide("own")
@@ -3632,7 +3632,7 @@ function PlayFormModal({
   }))), baseMeta.needsOn && /*#__PURE__*/React.createElement(Field, {
     label: "Penalty on"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
+    className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: on === "them",
     onClick: () => setOn("them")
@@ -3663,7 +3663,7 @@ function PlayFormModal({
     className: inputCls,
     placeholder: "0"
   }), baseMeta.signable && /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5 mt-2.5"
+    className: "grid grid-cols-2 gap-3 mt-2.5"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: !isLoss,
     onClick: () => setIsLoss(false)
@@ -3705,7 +3705,7 @@ function PlayFormModal({
   }, p.number ? `#${p.number} ` : "", p.name)))), baseMeta.fumbleToggle && !isEditing && /*#__PURE__*/React.createElement(Field, {
     label: baseMeta.fumbleToggle
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-2 gap-2.5"
+    className: "grid grid-cols-2 gap-3"
   }, /*#__PURE__*/React.createElement(Chip, {
     active: !fumbledAfter,
     onClick: () => setFumbledAfter(false)
