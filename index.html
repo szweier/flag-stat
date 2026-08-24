@@ -3351,6 +3351,24 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
   const fieldLength = ctx.fieldLength;
   const player = roster.find(p => p.id === play.playerId);
   const passer = roster.find(p => p.id === play.passerId);
+  if (play.playerId && !player) {
+    console.error("[narrative] play.playerId set but no matching roster entry found", {
+      playId: play.id,
+      playType: play.type,
+      playerId: play.playerId,
+      rosterIds: roster.map(p => p.id),
+      rosterNames: roster.map(p => p.name)
+    });
+  }
+  if (play.passerId && !passer) {
+    console.error("[narrative] play.passerId set but no matching roster entry found", {
+      playId: play.id,
+      playType: play.type,
+      passerId: play.passerId,
+      rosterIds: roster.map(p => p.id),
+      rosterNames: roster.map(p => p.name)
+    });
+  }
   const beforeSpot = formatYardLine(ctx.before.ballOn, fieldLength);
   const afterSpot = formatYardLine(ctx.after.ballOn, fieldLength);
   const actingTeam = play.possession === "us" ? team.name : opponent;
