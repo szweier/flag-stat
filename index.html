@@ -260,13 +260,22 @@ function formatYardLine(ballOn, fieldLength) {
 // way, since it always means the coach's side, never the subject of the
 // sentence. Includes its own leading "the" only where grammar actually
 // needs one (before "end zone"), so callers can drop the hardcoded "the".
-function narrativeSpot(ballOn, fieldLength) {
+// Play-by-play sentences name the actual team ("to the Cowboys 34") rather
+// than a pronoun like "own"/"their"/"your" — real broadcasts do this for
+// exactly the reason it matters here: a pronoun's meaning depends on point
+// of view, and a sentence describing the opponent's play while using
+// second-person "your" for the coach's side mixes two different points of
+// view in one sentence. A team name means the same thing regardless of
+// who the rest of the sentence is about. Includes its own leading "the"
+// where grammar needs one (every case except "midfield"), so callers
+// don't need to add it themselves.
+function narrativeSpot(ballOn, fieldLength, teamName, opponentName) {
   const half = fieldLength / 2;
   const rounded = Math.round(ballOn);
   if (rounded <= 0 || rounded >= fieldLength) return "the end zone";
   if (Math.abs(ballOn - half) < 0.5) return "midfield";
-  if (ballOn < half) return `your ${rounded}`;
-  return `their ${Math.round(fieldLength - ballOn)}`;
+  if (ballOn < half) return `the ${teamName} ${rounded}`;
+  return `the ${opponentName} ${Math.round(fieldLength - ballOn)}`;
 }
 
 // The inverse of formatYardLine — breaks a position into the same
@@ -3373,8 +3382,8 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
   const fieldLength = ctx.fieldLength;
   const player = roster.find(p => sameId(p.id, play.playerId));
   const passer = roster.find(p => sameId(p.id, play.passerId));
-  const beforeSpot = narrativeSpot(ctx.before.ballOn, fieldLength);
-  const afterSpot = narrativeSpot(ctx.after.ballOn, fieldLength);
+  const beforeSpot = narrativeSpot(ctx.before.ballOn, fieldLength, team.name, opponent);
+  const afterSpot = narrativeSpot(ctx.after.ballOn, fieldLength, team.name, opponent);
   const actingTeam = play.possession === "us" ? team.name : opponent;
   const defendingTeam = play.possession === "us" ? opponent : team.name;
   const plural = n => Math.abs(n) === 1 ? "yard" : "yards";
@@ -3424,7 +3433,7 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
       {
         const qb = passer ? passer.name : `${possessive(actingTeam)} QB`;
         const yards = Math.abs(play.yards || 0);
-        const byWhom = player ? `, by ${player.name},` : "";
+        const byWhom = player ? ` by ${player.name}` : "";
         return `${qb} was sacked${byWhom} for a loss of ${yards} ${plural(yards)}, from ${beforeSpot} to ${afterSpot}.`;
       }
     case "interception":
@@ -3433,7 +3442,7 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
         const picker = player ? player.name : defendingTeam;
         const air = play.airYards || 0;
         const ret = play.yards || 0;
-        const pickSpot = narrativeSpot(clamp(play.possession === "us" ? ctx.before.ballOn + air : ctx.before.ballOn - air, 0, fieldLength), fieldLength);
+        const pickSpot = narrativeSpot(clamp(play.possession === "us" ? ctx.before.ballOn + air : ctx.before.ballOn - air, 0, fieldLength), fieldLength, team.name, opponent);
         const airClause = air > 0 ? ` at ${pickSpot}` : ` at the line of scrimmage`;
         const retClause = ret > 0 ? `, returned ${ret} ${plural(ret)} to ${afterSpot}` : ` and downed at ${afterSpot}`;
         return `${qb}'s pass was intercepted by ${picker}${airClause}${retClause}.${td}`;
@@ -3454,7 +3463,7 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
         const punter = passer ? passer.name : `${possessive(actingTeam)} punter`;
         const dist = play.yards || 0;
         const ret = play.returnYards || 0;
-        const landingSpot = narrativeSpot(clamp(play.possession === "us" ? ctx.before.ballOn + dist : ctx.before.ballOn - dist, 0, fieldLength), fieldLength);
+        const landingSpot = narrativeSpot(clamp(play.possession === "us" ? ctx.before.ballOn + dist : ctx.before.ballOn - dist, 0, fieldLength), fieldLength, team.name, opponent);
         let sentence = `${punter} punted ${dist} ${plural(dist)}, from ${beforeSpot} to ${landingSpot}`;
         if (ret > 0) {
           const returner = player ? player.name : defendingTeam;
@@ -3471,7 +3480,7 @@ function buildPlayNarrative(play, ctx, team, opponent, roster, scored) {
     case "turnover_on_downs":
       return `Turnover on downs at ${afterSpot}. ${defendingTeam} takes over.`;
     case "safety":
-      return `Safety! ${actingTeam} tackled behind their own goal line. ${defendingTeam} scores 2 points.`;
+      return `Safety! ${actingTeam} tackled in the end zone. ${defendingTeam} scores 2 points.`;
     case "pat1":
     case "pat2":
       {
