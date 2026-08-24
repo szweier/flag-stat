@@ -58,7 +58,8 @@
 const {
   useState,
   useEffect,
-  useMemo
+  useMemo,
+  useRef
 } = React;
 
 // ============================================================
@@ -108,6 +109,7 @@ const Loader2 = p => /*#__PURE__*/React.createElement(Icon, {
 }, "\u25E1");
 const Pencil = p => /*#__PURE__*/React.createElement(Icon, p, "\u270E");
 const Download = p => /*#__PURE__*/React.createElement(Icon, p, "\u2B07");
+const Upload = p => /*#__PURE__*/React.createElement(Icon, p, "\u2B06");
 const RefreshCcw = p => /*#__PURE__*/React.createElement(Icon, p, "\u21BB");
 const SkipForward = p => /*#__PURE__*/React.createElement(Icon, p, "\u23ED");
 const AlertTriangle = p => /*#__PURE__*/React.createElement(Icon, p, "\u26A0");
@@ -609,9 +611,11 @@ function emptyPlayerStats() {
     rushAtt: 0,
     rushYards: 0,
     rushTDs: 0,
+    longestRush: 0,
     rec: 0,
     recYards: 0,
     recTDs: 0,
+    longestRec: 0,
     turnovers: 0,
     tackles: 0,
     sacks: 0,
@@ -644,11 +648,17 @@ function computePlayerStats(game) {
         // how it happened rather than blended into one generic stat.
         if (p.type === "run") {
           bump(p.playerId).rushAtt += 1;
-          if (typeof p.yards === "number") bump(p.playerId).rushYards += p.yards;
+          if (typeof p.yards === "number") {
+            bump(p.playerId).rushYards += p.yards;
+            bump(p.playerId).longestRush = Math.max(bump(p.playerId).longestRush, p.yards);
+          }
           if (weScored) bump(p.playerId).rushTDs += 1;
         } else if (p.type === "pass_complete") {
           bump(p.playerId).rec += 1;
-          if (typeof p.yards === "number") bump(p.playerId).recYards += p.yards;
+          if (typeof p.yards === "number") {
+            bump(p.playerId).recYards += p.yards;
+            bump(p.playerId).longestRec = Math.max(bump(p.playerId).longestRec, p.yards);
+          }
           if (weScored) bump(p.playerId).recTDs += 1;
         }
       } else if (p.possession === "them") {
@@ -693,6 +703,43 @@ function computePlayerStats(game) {
 // completion counts for two different players in two different ways
 // (a touch/yards/TD for the receiver, an attempt/completion for the QB).
 // ============================================================
+// Team-level summary for a single game: total offensive yards, total
+// offensive plays (rushes + pass attempts + sacks, the standard football
+// definition), and the single longest play — offense or a defensive/
+// special-teams return, whichever gained the most.
+function computeGameTotals(game) {
+  let totalYards = 0,
+    totalPlays = 0,
+    longestPlay = null;
+  for (const p of game.plays) {
+    if (p.possession === "us" && ["run", "pass_complete", "pass_incomplete", "sack"].includes(p.type)) {
+      totalPlays += 1;
+      if (typeof p.yards === "number") totalYards += p.yards;
+    }
+    let candidateYards = null,
+      candidateType = p.type;
+    if (p.possession === "us" && ["run", "pass_complete"].includes(p.type) && typeof p.yards === "number") {
+      candidateYards = p.yards;
+    } else if (p.possession === "them" && (p.type === "interception" || p.type === "fumble") && typeof p.yards === "number") {
+      candidateYards = p.yards;
+    } else if (p.possession === "them" && p.type === "punt" && typeof p.returnYards === "number") {
+      candidateYards = p.returnYards;
+      candidateType = "punt_return";
+    }
+    if (candidateYards !== null && (!longestPlay || candidateYards > longestPlay.yards)) {
+      longestPlay = {
+        yards: candidateYards,
+        type: candidateType,
+        playerId: p.playerId || null
+      };
+    }
+  }
+  return {
+    totalYards,
+    totalPlays,
+    longestPlay
+  };
+}
 function computeQBStats(game) {
   const scoringPlays = computeScoringPlays(game);
   const scoringByPlayId = new Map(scoringPlays.map(s => [s.playId, s]));
@@ -766,6 +813,59 @@ function downloadCSV(filename, rows) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+function downloadJSON(filename, data) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+// A full backup, not a stat summary — every game's complete play-by-play
+// and the roster, exactly as stored, in case Firestore data ever needs to
+// be recovered or moved somewhere else. The CSV exports elsewhere are
+// derived stat sheets; this is the raw source data.
+async function fetchTeamBackup(team) {
+  const gamesSnap = await gamesCol(team.id).get();
+  const games = gamesSnap.docs.map(d => ({
+    ...d.data(),
+    id: d.id
+  }));
+  return {
+    exportedAt: new Date().toISOString(),
+    team: {
+      ...team
+    },
+    games
+  };
+}
+// Restores a backup into the CURRENTLY OPEN team — games are written back
+// using their original ids, so restoring the same file twice overwrites
+// with identical data rather than duplicating anything. Ownership,
+// assistants, and season are deliberately left untouched: a backup is a
+// snapshot of roster + games, not of who has access to the team today.
+async function restoreTeamBackup(teamId, backup) {
+  if (!backup || !Array.isArray(backup.games) || !backup.team) {
+    throw new Error("That file doesn't look like a FlagStat backup.");
+  }
+  await teamsCol().doc(teamId).update({
+    roster: backup.team.roster || []
+  });
+  const batch = db.batch();
+  for (const g of backup.games) {
+    const {
+      id,
+      ...gameData
+    } = g;
+    if (!id) continue;
+    batch.set(gamesCol(teamId).doc(id), gameData);
+  }
+  await batch.commit();
+  return backup.games.length;
 }
 const DEMO_TEAM = {
   name: "Demo Squad",
@@ -1135,6 +1235,7 @@ table { border-collapse: collapse; }
   .hover-border-soft:hover { border-color: rgba(255,255,255,0.25); }
   .hover-text-red:hover { color: #C1432E; }
   .hover-text-primary:hover { color: #EDEFE7; }
+  .hover-text-gold:hover { color: #E8B33D; }
   .focus-gold:focus { border-color: #E8B33D; outline: none; }
   .active-dim-90:active { filter: brightness(0.9); }
   .active-dim-95:active { filter: brightness(0.95); }
@@ -1228,6 +1329,7 @@ table { border-collapse: collapse; }
     outline: none; transition: border-color 0.15s ease;
   }
   .field-input:focus { border-color: #E8B33D; }
+  .hidden-input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 
   /* Sized precisely for a jersey number (max 3 digits) — the default
      .field-input padding (1rem each side) was eating most of a "just big
@@ -1250,8 +1352,53 @@ table { border-collapse: collapse; }
 // ============================================================
 const teamsCol = () => db.collection("teams");
 const gamesCol = teamId => teamsCol().doc(teamId).collection("games");
+const usersCol = () => db.collection("users");
+
+// A lightweight directory of everyone who's ever logged in, keyed by uid
+// with their email attached — this is what makes "invite a coach by email"
+// possible client-side at all, since there's no backend here to look up a
+// Firebase Auth user by email directly. Someone has to have signed in at
+// least once with that email before they can be invited.
+async function upsertUserDirectory(uid, email) {
+  if (!email) return;
+  await usersCol().doc(uid).set({
+    uid,
+    email: email.toLowerCase()
+  }, {
+    merge: true
+  });
+}
+async function findUserByEmail(email) {
+  const snap = await usersCol().where("email", "==", email.trim().toLowerCase()).limit(1).get();
+  if (snap.empty) return null;
+  return snap.docs[0].data();
+}
+// Assistants carry a role: "editor" (full read/write, same as the owner
+// except managing coaches) or "viewer" (read-only). Two flat uid arrays —
+// assistantUids for editors, viewerUids for viewers — exist alongside the
+// display-friendly assistants array specifically so the security rules can
+// check membership with a simple `in`, rather than needing to inspect an
+// array of {uid, email, role} objects to find one field.
+function roleUidField(role) {
+  return role === "viewer" ? "viewerUids" : "assistantUids";
+}
+async function addAssistant(teamId, assistant) {
+  await teamsCol().doc(teamId).update({
+    assistants: FieldValue.arrayUnion(assistant),
+    [roleUidField(assistant.role)]: FieldValue.arrayUnion(assistant.uid)
+  });
+}
+async function removeAssistant(teamId, assistant) {
+  await teamsCol().doc(teamId).update({
+    assistants: FieldValue.arrayRemove(assistant),
+    [roleUidField(assistant.role)]: FieldValue.arrayRemove(assistant.uid)
+  });
+}
 async function createTeam(uid, data) {
   const ref = await teamsCol().add({
+    assistants: [],
+    assistantUids: [],
+    viewerUids: [],
     ...data,
     ownerUid: uid,
     createdAt: FieldValue.serverTimestamp()
@@ -1347,17 +1494,54 @@ function FlagStatApp() {
   const [activeGame, setActiveGame] = useState(null);
   const [toast, setToast] = useState(null);
   const online = useOnlineStatus();
-  useEffect(() => auth.onAuthStateChanged(setAuthUser), []);
+  useEffect(() => auth.onAuthStateChanged(u => {
+    setAuthUser(u);
+    if (u) upsertUserDirectory(u.uid, u.email).catch(() => {});
+  }), []);
   useEffect(() => {
     if (!authUser) {
       setTeams([]);
       return;
     }
-    const unsub = teamsCol().where("ownerUid", "==", authUser.uid).onSnapshot(snap => setTeams(snap.docs.map(d => ({
-      ...d.data(),
-      id: d.id
-    }))), err => flash(describeFirebaseError(err, "load your teams")));
-    return unsub;
+    // Merged from three listeners rather than one query, since a coach's
+    // team list now includes teams they own, teams they're an editor on,
+    // and teams they're a view-only viewer on — three different fields, so
+    // one combined Firestore query isn't a clean fit here with this SDK
+    // version.
+    let owned = [];
+    let assisted = [];
+    let viewed = [];
+    const merge = () => {
+      const byId = new Map();
+      [...owned, ...assisted, ...viewed].forEach(t => byId.set(t.id, t));
+      setTeams([...byId.values()]);
+    };
+    const unsub1 = teamsCol().where("ownerUid", "==", authUser.uid).onSnapshot(snap => {
+      owned = snap.docs.map(d => ({
+        ...d.data(),
+        id: d.id
+      }));
+      merge();
+    }, err => flash(describeFirebaseError(err, "load your teams")));
+    const unsub2 = teamsCol().where("assistantUids", "array-contains", authUser.uid).onSnapshot(snap => {
+      assisted = snap.docs.map(d => ({
+        ...d.data(),
+        id: d.id
+      }));
+      merge();
+    }, err => flash(describeFirebaseError(err, "load teams you're helping coach")));
+    const unsub3 = teamsCol().where("viewerUids", "array-contains", authUser.uid).onSnapshot(snap => {
+      viewed = snap.docs.map(d => ({
+        ...d.data(),
+        id: d.id
+      }));
+      merge();
+    }, err => flash(describeFirebaseError(err, "load teams shared with you")));
+    return () => {
+      unsub1();
+      unsub2();
+      unsub3();
+    };
   }, [authUser]);
   function flash(msg) {
     setToast(msg);
@@ -1440,6 +1624,19 @@ function FlagStatApp() {
       setActiveTeam(team);
       setActiveGame(game);
       setScreen(game.status === "final" ? "gameSummary" : "liveGame");
+    },
+    onLeaveTeam: async t => {
+      const role = (t.viewerUids || []).includes(authUser.uid) ? "viewer" : "editor";
+      try {
+        await removeAssistant(t.id, {
+          uid: authUser.uid,
+          email: authUser.email,
+          role
+        });
+        flash(`You've left ${t.name}.`);
+      } catch (err) {
+        flash(describeFirebaseError(err, "leave that team"));
+      }
     }
   }), screen === "seasonStats" && activeTeam && /*#__PURE__*/React.createElement(SeasonStats, {
     team: activeTeam,
@@ -1455,6 +1652,32 @@ function FlagStatApp() {
     }
   }), screen === "teamForm" && /*#__PURE__*/React.createElement(TeamForm, {
     team: activeTeam,
+    isOwner: activeTeam ? activeTeam.ownerUid === authUser.uid : true,
+    flash: flash,
+    onAddAssistant: async assistant => {
+      try {
+        await addAssistant(activeTeam.id, assistant);
+        setActiveTeam({
+          ...activeTeam,
+          assistants: [...(activeTeam.assistants || []), assistant],
+          assistantUids: [...(activeTeam.assistantUids || []), assistant.uid]
+        });
+      } catch (err) {
+        flash(describeFirebaseError(err, "add that coach"));
+      }
+    },
+    onRemoveAssistant: async assistant => {
+      try {
+        await removeAssistant(activeTeam.id, assistant);
+        setActiveTeam({
+          ...activeTeam,
+          assistants: (activeTeam.assistants || []).filter(a => a.uid !== assistant.uid),
+          assistantUids: (activeTeam.assistantUids || []).filter(uid => uid !== assistant.uid)
+        });
+      } catch (err) {
+        flash(describeFirebaseError(err, "remove that coach"));
+      }
+    },
     onCancel: () => setScreen("dashboard"),
     onDelete: activeTeam ? () => handleDeleteTeam(activeTeam) : null,
     onSave: async team => {
@@ -1520,6 +1743,14 @@ function FlagStatApp() {
           await appendPlays(activeTeam.id, g.id, writeHint.entries);
         } else if (writeHint && writeHint.type === "remove" && writeHint.entries.length > 0) {
           await removePlaysFromGame(activeTeam.id, g.id, writeHint.entries);
+        } else if (writeHint && writeHint.type === "edit") {
+          // Edit is a remove-then-add of the exact play object, not a
+          // blanket array overwrite — same atomic-safety reasoning as
+          // the add/remove paths above, just as two sequential calls
+          // since Firestore can't arrayRemove and arrayUnion on the
+          // same field within a single update.
+          await removePlaysFromGame(activeTeam.id, g.id, [writeHint.oldEntry]);
+          await appendPlays(activeTeam.id, g.id, [writeHint.newEntry]);
         } else {
           await updateGame(activeTeam.id, g.id, {
             plays: g.plays
@@ -1553,6 +1784,9 @@ function FlagStatApp() {
       try {
         if (writeHint && writeHint.type === "remove" && writeHint.entries.length > 0) {
           await removePlaysFromGame(activeTeam.id, g.id, writeHint.entries);
+        } else if (writeHint && writeHint.type === "edit") {
+          await removePlaysFromGame(activeTeam.id, g.id, [writeHint.oldEntry]);
+          await appendPlays(activeTeam.id, g.id, [writeHint.newEntry]);
         } else {
           await updateGame(activeTeam.id, g.id, {
             plays: g.plays
@@ -1694,9 +1928,11 @@ function Dashboard({
   onStartGame,
   onSeasonStats,
   onDemoTeam,
-  onOpenGame
+  onOpenGame,
+  onLeaveTeam
 }) {
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState(null);
+  const [confirmLeaveTeam, setConfirmLeaveTeam] = useState(null);
   return /*#__PURE__*/React.createElement("div", {
     className: "max-w-2xl mx-auto px-4 sm:px-5 pb-16 pt-6"
   }, /*#__PURE__*/React.createElement("header", {
@@ -1738,13 +1974,15 @@ function Dashboard({
   }, teams.map(t => /*#__PURE__*/React.createElement(TeamCard, {
     key: t.id,
     team: t,
+    role: t.ownerUid === authUser.uid ? "owner" : (t.viewerUids || []).includes(authUser.uid) ? "viewer" : "editor",
     flash: flash,
     onOpenRoster: onOpenRoster,
     onSeasonStats: onSeasonStats,
     onEditTeam: onEditTeam,
     onStartGame: onStartGame,
     onOpenGame: onOpenGame,
-    onRequestDelete: () => setConfirmDeleteTeam(t)
+    onRequestDelete: () => setConfirmDeleteTeam(t),
+    onLeaveTeam: () => setConfirmLeaveTeam(t)
   }))), confirmDeleteTeam && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Delete team?",
     message: `This removes "${confirmDeleteTeam.name}", its roster, and its full game history. This can't be undone.`,
@@ -1755,17 +1993,29 @@ function Dashboard({
       onDeleteTeam(confirmDeleteTeam);
       setConfirmDeleteTeam(null);
     }
+  }), confirmLeaveTeam && /*#__PURE__*/React.createElement(ConfirmDialog, {
+    title: "Leave this team?",
+    message: `You'll lose access to "${confirmLeaveTeam.name}" — its roster, games, and stats. The owner can add you back later if needed.`,
+    confirmLabel: "Leave team",
+    danger: true,
+    onCancel: () => setConfirmLeaveTeam(null),
+    onConfirm: () => {
+      onLeaveTeam(confirmLeaveTeam);
+      setConfirmLeaveTeam(null);
+    }
   }));
 }
 function TeamCard({
   team,
+  role,
   flash,
   onOpenRoster,
   onSeasonStats,
   onEditTeam,
   onStartGame,
   onOpenGame,
-  onRequestDelete
+  onRequestDelete,
+  onLeaveTeam
 }) {
   const [games, setGames] = useState([]);
   useEffect(() => {
@@ -1777,6 +2027,8 @@ function TeamCard({
   }, [team.id]);
   const rec = computeRecord(games);
   const recentGames = [...games].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 4);
+  const isOwner = role === "owner";
+  const isViewer = role === "viewer";
   return /*#__PURE__*/React.createElement("div", {
     className: "card-panel p-5"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1785,7 +2037,7 @@ function TeamCard({
     className: "font-bold text-lg"
   }, team.name), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-muted-3 font-mono"
-  }, team.fieldLength, " × ", team.fieldWidth, " yd field · ", (team.roster || []).length, " players")), /*#__PURE__*/React.createElement(Shield, {
+  }, team.fieldLength, " × ", team.fieldWidth, " yd field · ", (team.roster || []).length, " players", role === "editor" ? " · you're assisting" : isViewer ? " · view only" : "")), /*#__PURE__*/React.createElement(Shield, {
     className: "text-blue shrink-0",
     size: 22
   })), /*#__PURE__*/React.createElement("div", {
@@ -1808,19 +2060,24 @@ function TeamCard({
     className: "btn-outline flex items-center justify-center space-x-1.5"
   }, /*#__PURE__*/React.createElement(TrendingUp, {
     size: 15
-  }), " Season"), /*#__PURE__*/React.createElement("button", {
+  }), " Season"), !isViewer && /*#__PURE__*/React.createElement("button", {
     onClick: () => onEditTeam(team),
     className: "btn-outline flex items-center justify-center space-x-1.5"
   }, /*#__PURE__*/React.createElement(Settings, {
     size: 15
-  }), " Settings"), /*#__PURE__*/React.createElement("button", {
+  }), " Settings"), isOwner && /*#__PURE__*/React.createElement("button", {
     onClick: onRequestDelete,
     className: "btn-outline-red flex items-center justify-center space-x-1.5"
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 15
-  }), " Delete"), /*#__PURE__*/React.createElement("button", {
+  }), " Delete"), !isOwner && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onLeaveTeam(team),
+    className: "btn-outline-red flex items-center justify-center space-x-1.5"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 15
+  }), " Leave team"), !isViewer && /*#__PURE__*/React.createElement("button", {
     onClick: () => onStartGame(team),
-    className: "btn-primary col-span-2 sm:col-span-1 flex items-center justify-center space-x-1.5 sm:ml-auto"
+    className: `btn-primary flex items-center justify-center space-x-1.5 sm:ml-auto ${isOwner ? "col-span-2 sm:col-span-1" : "col-span-2"}`
   }, /*#__PURE__*/React.createElement(Play, {
     size: 15
   }), " Start game")), recentGames.length > 0 && /*#__PURE__*/React.createElement("div", {
@@ -1835,13 +2092,112 @@ function TeamCard({
     className: "font-mono text-muted-2 text-xs"
   }, g.date)))));
 }
+function ManageCoachesModal({
+  team,
+  flash,
+  onClose,
+  onAdd,
+  onRemove
+}) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("editor");
+  const [busy, setBusy] = useState(false);
+  const assistants = team.assistants || [];
+  async function invite() {
+    if (!email.trim()) return;
+    setBusy(true);
+    try {
+      const found = await findUserByEmail(email);
+      if (!found) {
+        flash && flash("No FlagStat account found with that email yet — they'll need to sign up first, then you can add them.");
+      } else if (found.uid === team.ownerUid) {
+        flash && flash("That's already the team owner.");
+      } else if (assistants.some(a => a.uid === found.uid)) {
+        flash && flash("They're already a coach on this team. Remove them first if you want to change their access level.");
+      } else {
+        await onAdd({
+          uid: found.uid,
+          email: found.email,
+          role
+        });
+        flash && flash(`${found.email} can now ${role === "viewer" ? "view" : "help track"} ${team.name}.`);
+        setEmail("");
+      }
+    } catch (err) {
+      flash && flash(describeFirebaseError(err, "look that up"));
+    }
+    setBusy(false);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-sm p-6 pb-9 sm:pb-6"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, "Assistant coaches"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-3 mb-4"
+  }, "Editors can track games, edit the roster, and view stats — same access you have, except managing coaches. Viewers can see everything but can't make changes. They need a FlagStat account under this email already."), /*#__PURE__*/React.createElement(Field, {
+    label: "Access level"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-3"
+  }, /*#__PURE__*/React.createElement(Chip, {
+    active: role === "editor",
+    onClick: () => setRole("editor")
+  }, "Editor"), /*#__PURE__*/React.createElement(Chip, {
+    active: role === "viewer",
+    onClick: () => setRole("viewer")
+  }, "Viewer"))), /*#__PURE__*/React.createElement(Field, {
+    label: "Invite by email"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex space-x-2"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "email",
+    value: email,
+    onChange: e => setEmail(e.target.value),
+    className: `${inputCls} flex-1`,
+    placeholder: "coach@email.com"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: invite,
+    disabled: busy || !email.trim(),
+    className: "btn-primary px-5 disabled-dim-60"
+  }, busy ? "…" : /*#__PURE__*/React.createElement(Plus, {
+    size: 18
+  })))), assistants.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 space-y-2"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-wide text-muted-3 mb-2 font-semibold"
+  }, "Current coaches"), assistants.map(a => /*#__PURE__*/React.createElement("div", {
+    key: a.uid,
+    className: "card-panel flex items-center justify-between px-4 py-3"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-sm"
+  }, a.email, " ", /*#__PURE__*/React.createElement("span", {
+    className: "text-muted-4 text-xs font-mono"
+  }, "· ", a.role === "viewer" ? "viewer" : "editor")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onRemove(a),
+    className: "text-red p-1.5"
+  }, /*#__PURE__*/React.createElement(Trash2, {
+    size: 16
+  })))))));
+}
 function TeamForm({
   team,
+  isOwner,
+  flash,
+  onAddAssistant,
+  onRemoveAssistant,
   onCancel,
   onSave,
   onDelete
 }) {
-  var _team$touchdownPoints;
+  var _team$touchdownPoints, _team$assistants;
   const [name, setName] = useState((team === null || team === void 0 ? void 0 : team.name) || "");
   const [fieldLength, setFieldLength] = useState((team === null || team === void 0 ? void 0 : team.fieldLength) || 70);
   const [fieldWidth, setFieldWidth] = useState((team === null || team === void 0 ? void 0 : team.fieldWidth) || 30);
@@ -1850,6 +2206,53 @@ function TeamForm({
   const [yardsPerFirstDown, setYardsPerFirstDown] = useState((team === null || team === void 0 ? void 0 : team.yardsPerFirstDown) || 15);
   const [touchdownPoints, setTouchdownPoints] = useState((_team$touchdownPoints = team === null || team === void 0 ? void 0 : team.touchdownPoints) !== null && _team$touchdownPoints !== void 0 ? _team$touchdownPoints : 6);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [manageCoachesOpen, setManageCoachesOpen] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState(null);
+  const restoreInputRef = useRef(null);
+  async function backupData() {
+    setBackingUp(true);
+    try {
+      const backup = await fetchTeamBackup(team);
+      downloadJSON(`${team.name.replace(/\s+/g, "_")}_backup_${new Date().toISOString().slice(0, 10)}.json`, backup);
+      flash && flash("Backup downloaded — this is your full raw data, every game and the roster, in case you ever need to restore or move it.");
+    } catch (err) {
+      flash && flash(describeFirebaseError(err, "prepare that backup"));
+    }
+    setBackingUp(false);
+  }
+  function handleRestoreFileSelected(e) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed.team || !Array.isArray(parsed.games)) {
+          flash && flash("That file doesn't look like a FlagStat backup.");
+          return;
+        }
+        setPendingRestore(parsed);
+      } catch (err) {
+        flash && flash("Couldn't read that file — make sure it's a FlagStat backup JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  }
+  async function confirmRestore() {
+    if (!pendingRestore) return;
+    setRestoring(true);
+    try {
+      const count = await restoreTeamBackup(team.id, pendingRestore);
+      flash && flash(`Restored ${count} game${count === 1 ? "" : "s"} and the roster from the backup.`);
+    } catch (err) {
+      flash && flash(describeFirebaseError(err, "restore that backup"));
+    }
+    setRestoring(false);
+    setPendingRestore(null);
+  }
   function submit(e) {
     e.preventDefault();
     if (!name.trim()) return;
@@ -1942,13 +2345,55 @@ function TeamForm({
     className: inputCls
   })), /*#__PURE__*/React.createElement("button", {
     className: "btn-primary w-full text-base"
-  }, "Save team"), onDelete && /*#__PURE__*/React.createElement("button", {
+  }, "Save team"), team && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: backupData,
+    disabled: backingUp,
+    className: "btn-outline w-full disabled-dim-60"
+  }, /*#__PURE__*/React.createElement(Download, {
+    size: 16
+  }), " ", backingUp ? "Preparing backup…" : "Download full team backup"), team && isOwner && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    ref: restoreInputRef,
+    type: "file",
+    accept: "application/json",
+    className: "hidden-input",
+    onChange: handleRestoreFileSelected
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => {
+      var _restoreInputRef$curr;
+      return (_restoreInputRef$curr = restoreInputRef.current) === null || _restoreInputRef$curr === void 0 ? void 0 : _restoreInputRef$curr.click();
+    },
+    disabled: restoring,
+    className: "btn-outline w-full disabled-dim-60"
+  }, /*#__PURE__*/React.createElement(Upload, {
+    size: 16
+  }), " ", restoring ? "Restoring…" : "Restore from backup")), team && isOwner && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setManageCoachesOpen(true),
+    className: "btn-outline w-full"
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 16
+  }), " Assistant coaches", (_team$assistants = team.assistants) !== null && _team$assistants !== void 0 && _team$assistants.length ? ` (${team.assistants.length})` : ""), onDelete && isOwner && /*#__PURE__*/React.createElement("button", {
     type: "button",
     onClick: () => setConfirmDelete(true),
     className: "btn-outline-red w-full"
   }, /*#__PURE__*/React.createElement(Trash2, {
     size: 16
-  }), " Delete this team")), confirmDelete && /*#__PURE__*/React.createElement(ConfirmDialog, {
+  }), " Delete this team")), manageCoachesOpen && /*#__PURE__*/React.createElement(ManageCoachesModal, {
+    team: team,
+    flash: flash,
+    onClose: () => setManageCoachesOpen(false),
+    onAdd: onAddAssistant,
+    onRemove: onRemoveAssistant
+  }), pendingRestore && /*#__PURE__*/React.createElement(ConfirmDialog, {
+    title: "Restore from this backup?",
+    message: `This overwrites the current roster and adds or updates ${pendingRestore.games.length} game${pendingRestore.games.length === 1 ? "" : "s"} from the backup file${pendingRestore.exportedAt ? ` (dated ${new Date(pendingRestore.exportedAt).toLocaleDateString()})` : ""}. Games not in the backup are left alone. This can't be undone.`,
+    confirmLabel: "Restore",
+    danger: true,
+    onCancel: () => setPendingRestore(null),
+    onConfirm: confirmRestore
+  }), confirmDelete && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Delete team?",
     message: `This removes "${team.name}", its roster, and its game history. This can't be undone.`,
     confirmLabel: "Delete team",
@@ -2272,6 +2717,8 @@ function LiveGame({
 }) {
   const [draft, setDraft] = useState(null);
   const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
+  const [confirmEndGame, setConfirmEndGame] = useState(false);
+  const [editingPlay, setEditingPlay] = useState(null);
   const [showFullLog, setShowFullLog] = useState(false);
   const [qbPickerOpen, setQbPickerOpen] = useState(false);
   const [changeBallOpen, setChangeBallOpen] = useState(false);
@@ -2285,26 +2732,40 @@ function LiveGame({
   const scoringPlayIds = useMemo(() => new Set(computeScoringPlays(game).map(s => s.playId)), [game]);
   const playContexts = useMemo(() => computePlayContexts(game), [game]);
   const currentQB = settings.roster.find(p => p.id === derived.currentQBId);
+  // Guards against a play (or an undo) getting logged twice from a fast
+  // double-tap on a slow connection — the button press fires, but nothing
+  // fires again until this one's had a moment to actually register.
+  const actionLockRef = useRef(false);
+  function withDebounce(fn) {
+    if (actionLockRef.current) return;
+    actionLockRef.current = true;
+    fn();
+    setTimeout(() => {
+      actionLockRef.current = false;
+    }, 600);
+  }
   function addPlays(playList) {
-    let state = derived;
-    const entries = [];
-    for (const play of playList) {
-      const entry = {
-        id: uid(),
-        quarter: state.quarter,
-        possession: state.possession,
-        timestamp: Date.now(),
-        ...play
-      };
-      entries.push(entry);
-      state = applyPlayToState(state, entry, settings);
-    }
-    onChange({
-      ...game,
-      plays: [...game.plays, ...entries]
-    }, {
-      type: "append",
-      entries
+    withDebounce(() => {
+      let state = derived;
+      const entries = [];
+      for (const play of playList) {
+        const entry = {
+          id: uid(),
+          quarter: state.quarter,
+          possession: state.possession,
+          timestamp: Date.now(),
+          ...play
+        };
+        entries.push(entry);
+        state = applyPlayToState(state, entry, settings);
+      }
+      onChange({
+        ...game,
+        plays: [...game.plays, ...entries]
+      }, {
+        type: "append",
+        entries
+      });
     });
   }
   function addPlay(play) {
@@ -2323,13 +2784,15 @@ function LiveGame({
   }
   function undoLast() {
     if (game.plays.length === 0) return;
-    const removed = game.plays[game.plays.length - 1];
-    onChange({
-      ...game,
-      plays: game.plays.slice(0, -1)
-    }, {
-      type: "remove",
-      entries: [removed]
+    withDebounce(() => {
+      const removed = game.plays[game.plays.length - 1];
+      onChange({
+        ...game,
+        plays: game.plays.slice(0, -1)
+      }, {
+        type: "remove",
+        entries: [removed]
+      });
     });
   }
   function handleInstant(type) {
@@ -2337,10 +2800,7 @@ function LiveGame({
       type
     });
   }
-  function handleConfirm(payload) {
-    const {
-      type
-    } = draft;
+  function buildEntryFromPayload(type, payload) {
     let entry = {
       type,
       playerId: payload.playerId || null
@@ -2352,6 +2812,32 @@ function LiveGame({
       entry.yards = Math.abs(Number(payload.yards) || 0);
       entry.on = payload.on;
     }
+    return entry;
+  }
+  function updatePlayInPlace(oldPlay, updatedFields) {
+    const newPlay = {
+      ...oldPlay,
+      ...updatedFields
+    };
+    const newPlays = game.plays.map(p => p.id === oldPlay.id ? newPlay : p);
+    onChange({
+      ...game,
+      plays: newPlays
+    }, {
+      type: "edit",
+      oldEntry: oldPlay,
+      newEntry: newPlay
+    });
+  }
+  function handleEditConfirm(payload) {
+    updatePlayInPlace(editingPlay, buildEntryFromPayload(editingPlay.type, payload));
+    setEditingPlay(null);
+  }
+  function handleConfirm(payload) {
+    const {
+      type
+    } = draft;
+    const entry = buildEntryFromPayload(type, payload);
     const playsToAdd = [entry];
     if (payload.fumbledAfter) {
       // Fold this play against the current state to see whether it already
@@ -2529,7 +3015,7 @@ function LiveGame({
     }) : handleInstant(pt.id),
     className: `play-btn ${pt.color}`
   }, pt.label))), /*#__PURE__*/React.createElement("button", {
-    onClick: () => onEnd(game),
+    onClick: () => setConfirmEndGame(true),
     className: "btn-outline-red w-full text-base mb-3"
   }, "End game"), /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between mt-6 mb-2.5"
@@ -2548,16 +3034,23 @@ function LiveGame({
     team: settings,
     opponent: game.opponent,
     scoringPlayIds: scoringPlayIds,
+    onEdit: setEditingPlay,
     onDelete: () => setConfirmDeletePlay(p)
   })), game.plays.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
-  }, "No plays logged yet.")), draft && /*#__PURE__*/React.createElement(PlayFormModal, {
-    draft: draft,
+  }, "No plays logged yet.")), (draft || editingPlay) && /*#__PURE__*/React.createElement(PlayFormModal, {
+    draft: draft || {
+      type: editingPlay.type
+    },
     roster: roster,
     currentQBId: derived.currentQBId,
-    possession: derived.possession,
-    onCancel: () => setDraft(null),
-    onConfirm: handleConfirm
+    possession: editingPlay ? editingPlay.possession || derived.possession : derived.possession,
+    initialPlay: editingPlay,
+    onCancel: () => {
+      setDraft(null);
+      setEditingPlay(null);
+    },
+    onConfirm: editingPlay ? handleEditConfirm : handleConfirm
   }), qbPickerOpen && /*#__PURE__*/React.createElement(QBPickerModal, {
     roster: roster,
     currentQBId: derived.currentQBId,
@@ -2575,6 +3068,16 @@ function LiveGame({
     danger: true,
     onCancel: () => setConfirmDeletePlay(null),
     onConfirm: () => removePlay(confirmDeletePlay.id)
+  }), confirmEndGame && /*#__PURE__*/React.createElement(ConfirmDialog, {
+    title: "End the game?",
+    message: "This locks in the final score and stats. You can still reopen it afterward from the summary screen if you need to make changes.",
+    confirmLabel: "End game",
+    danger: true,
+    onCancel: () => setConfirmEndGame(false),
+    onConfirm: () => {
+      setConfirmEndGame(false);
+      onEnd(game);
+    }
   }));
 }
 function QBPickerModal({
@@ -2938,10 +3441,13 @@ function PlayLogRow({
   team,
   opponent,
   scoringPlayIds,
+  onEdit,
   onDelete
 }) {
   const scored = scoringPlayIds ? scoringPlayIds.has(play.id) : play.type === "touchdown";
   const narrative = ctx ? buildPlayNarrative(play, ctx, team, opponent, roster, scored) : PLAY_LABELS[play.type] || play.type;
+  const meta = PLAY_TYPES.find(t => t.id === play.type);
+  const canEdit = onEdit && meta && meta.modal;
   return /*#__PURE__*/React.createElement("div", {
     className: "flex items-center justify-between text-sm bg-panel border border-soft-5 rounded-lg px-4 py-3"
   }, /*#__PURE__*/React.createElement("span", {
@@ -2951,7 +3457,12 @@ function PlayLogRow({
   }, narrative), scored && /*#__PURE__*/React.createElement(Award, {
     size: 15,
     className: "text-gold shrink-0 mr-2"
-  }), onDelete && /*#__PURE__*/React.createElement("button", {
+  }), canEdit && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onEdit(play),
+    className: "text-muted-5 hover-text-primary p-2 shrink-0 no-print"
+  }, /*#__PURE__*/React.createElement(Pencil, {
+    size: 15
+  })), onDelete && /*#__PURE__*/React.createElement("button", {
     onClick: onDelete,
     className: "text-muted-5 hover-text-red p-2 -mr-1 shrink-0 no-print"
   }, /*#__PURE__*/React.createElement(X, {
@@ -2963,17 +3474,19 @@ function PlayFormModal({
   roster,
   currentQBId,
   possession,
+  initialPlay,
   onCancel,
   onConfirm
 }) {
   const isOurBall = possession === "us";
-  const [yards, setYards] = useState("");
-  const [airYards, setAirYards] = useState("");
-  const [returnYards, setReturnYards] = useState("");
-  const [isLoss, setIsLoss] = useState(false);
-  const [playerId, setPlayerId] = useState("");
-  const [passerId, setPasserId] = useState(currentQBId || "");
-  const [on, setOn] = useState("them");
+  const isEditing = !!initialPlay;
+  const [yards, setYards] = useState(initialPlay ? String(Math.abs(initialPlay.yards || 0)) : "");
+  const [airYards, setAirYards] = useState(initialPlay && initialPlay.airYards ? String(initialPlay.airYards) : "");
+  const [returnYards, setReturnYards] = useState(initialPlay && initialPlay.returnYards ? String(initialPlay.returnYards) : "");
+  const [isLoss, setIsLoss] = useState(initialPlay ? (initialPlay.yards || 0) < 0 : false);
+  const [playerId, setPlayerId] = useState((initialPlay === null || initialPlay === void 0 ? void 0 : initialPlay.playerId) || "");
+  const [passerId, setPasserId] = useState((initialPlay === null || initialPlay === void 0 ? void 0 : initialPlay.passerId) || currentQBId || "");
+  const [on, setOn] = useState((initialPlay === null || initialPlay === void 0 ? void 0 : initialPlay.on) || "them");
   const [fumbledAfter, setFumbledAfter] = useState(false);
   const [fumbleReturnYards, setFumbleReturnYards] = useState("");
   const [fumbleRecoveredBy, setFumbleRecoveredBy] = useState("");
@@ -3034,7 +3547,7 @@ function PlayFormModal({
     className: "flex items-center justify-between mb-5"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "font-bold text-xl"
-  }, baseMeta.label, !needsPlayer && !needsPasser && !isOurBall ? " (opponent's play)" : ""), /*#__PURE__*/React.createElement("button", {
+  }, isEditing ? "Edit: " : "", baseMeta.label, !needsPlayer && !needsPasser && !isOurBall ? " (opponent's play)" : ""), /*#__PURE__*/React.createElement("button", {
     onClick: onCancel,
     className: "p-2 -mr-2 text-muted-3"
   }, /*#__PURE__*/React.createElement(X, {
@@ -3112,7 +3625,7 @@ function PlayFormModal({
   }, "— none —"), roster.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.number ? `#${p.number} ` : "", p.name)))), baseMeta.fumbleToggle && /*#__PURE__*/React.createElement(Field, {
+  }, p.number ? `#${p.number} ` : "", p.name)))), baseMeta.fumbleToggle && !isEditing && /*#__PURE__*/React.createElement(Field, {
     label: baseMeta.fumbleToggle
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid grid-cols-2 gap-2.5"
@@ -3152,7 +3665,7 @@ function PlayFormModal({
     className: "btn-primary w-full text-base mt-3"
   }, /*#__PURE__*/React.createElement(Check, {
     size: 18
-  }), " Log play")));
+  }), " ", isEditing ? "Save changes" : "Log play")));
 }
 
 // ============================================================
@@ -3172,6 +3685,7 @@ function GameSummary({
   const playContexts = useMemo(() => computePlayContexts(game), [game]);
   const stats = useMemo(() => computePlayerStats(game), [game]);
   const qbStats = useMemo(() => computeQBStats(game), [game]);
+  const gameTotals = useMemo(() => computeGameTotals(game), [game]);
   const rosterById = Object.fromEntries((settings.roster || []).map(p => [p.id, p]));
   const presentRoster = (settings.roster || []).filter(p => (game.presentIds || []).includes(p.id));
   const fullPlayerRows = [...presentRoster].sort((a, b) => {
@@ -3196,6 +3710,7 @@ function GameSummary({
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmDeletePlay, setConfirmDeletePlay] = useState(null);
+  const [editingPlay, setEditingPlay] = useState(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [opponent, setOpponent] = useState(game.opponent);
   const [date, setDate] = useState(game.date);
@@ -3210,16 +3725,50 @@ function GameSummary({
     } : undefined);
     setConfirmDeletePlay(null);
   }
+  function buildEntryFromPayload(type, payload) {
+    let entry = {
+      type,
+      playerId: payload.playerId || null
+    };
+    if (payload.passerId) entry.passerId = payload.passerId;
+    if (type === "interception") entry.airYards = Number(payload.airYards) || 0;
+    if (type === "punt") entry.returnYards = Number(payload.returnYards) || 0;
+    if (type === "sack") entry.yards = -Math.abs(Number(payload.yards) || 0);else if (["run", "pass_complete", "interception", "fumble", "punt"].includes(type)) entry.yards = Number(payload.yards) || 0;else if (type === "penalty") {
+      entry.yards = Math.abs(Number(payload.yards) || 0);
+      entry.on = payload.on;
+    }
+    return entry;
+  }
+  function handleEditConfirm(payload) {
+    const newPlay = {
+      ...editingPlay,
+      ...buildEntryFromPayload(editingPlay.type, payload)
+    };
+    const newPlays = game.plays.map(p => p.id === editingPlay.id ? newPlay : p);
+    onChange({
+      ...game,
+      plays: newPlays
+    }, {
+      type: "edit",
+      oldEntry: editingPlay,
+      newEntry: newPlay
+    });
+    setEditingPlay(null);
+  }
   function exportGameCSV() {
     const rows = [["Game", `${settings.name} vs ${game.opponent}`]];
     rows.push(["Date", game.date]);
     rows.push(["Final score", `${settings.name} ${derived.score.us} - ${derived.score.them} ${game.opponent}`]);
     rows.push([]);
+    rows.push(["Team totals"]);
+    rows.push(["Total Yards", "Total Plays", "Yds/Play", "Longest Play"]);
+    rows.push([gameTotals.totalYards, gameTotals.totalPlays, gameTotals.totalPlays ? (gameTotals.totalYards / gameTotals.totalPlays).toFixed(1) : "0.0", gameTotals.longestPlay ? `${gameTotals.longestPlay.yards} yds (${gameTotals.longestPlay.type})` : ""]);
+    rows.push([]);
     rows.push(["Offense"]);
-    rows.push(["Player", "Rush Att", "Rush Yds", "Rush TD", "Rec", "Rec Yds", "Rec TD", "Turnovers"]);
+    rows.push(["Player", "Rush Att", "Rush Yds", "Rush Avg", "Rush Long", "Rush TD", "Rec", "Rec Yds", "Rec Avg", "Rec Long", "Rec TD", "Turnovers"]);
     fullPlayerRows.forEach(p => {
       const s = stats[p.id] || emptyPlayerStats();
-      rows.push([p.name, s.rushAtt, s.rushYards, s.rushTDs, s.rec, s.recYards, s.recTDs, s.turnovers]);
+      rows.push([p.name, s.rushAtt, s.rushYards, s.rushAtt ? (s.rushYards / s.rushAtt).toFixed(1) : "0.0", s.longestRush, s.rushTDs, s.rec, s.recYards, s.rec ? (s.recYards / s.rec).toFixed(1) : "0.0", s.longestRec, s.recTDs, s.turnovers]);
     });
     if (Object.keys(qbStats).length > 0) {
       rows.push([]);
@@ -3335,7 +3884,24 @@ function GameSummary({
     className: "btn-outline flex-1 text-sm"
   }, /*#__PURE__*/React.createElement(Download, {
     size: 15
-  }), " Export / print PDF")), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+  }), " Export / print PDF")), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
+  }, "Team totals"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-3 mb-6"
+  }, /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Total yards",
+    value: gameTotals.totalYards
+  }), /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Total plays",
+    value: gameTotals.totalPlays
+  }), /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Yds/play",
+    value: gameTotals.totalPlays ? (gameTotals.totalYards / gameTotals.totalPlays).toFixed(1) : "0.0"
+  })), gameTotals.longestPlay && /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-2 mb-6"
+  }, "Longest play: ", /*#__PURE__*/React.createElement("span", {
+    className: "text-primary font-semibold"
+  }, gameTotals.longestPlay.yards, " yards"), gameTotals.longestPlay.playerId && rosterById[gameTotals.longestPlay.playerId] ? ` by ${rosterById[gameTotals.longestPlay.playerId].name}` : "", " ", "(", gameTotals.longestPlay.type === "punt_return" ? "punt return" : gameTotals.longestPlay.type === "interception" ? "interception return" : gameTotals.longestPlay.type === "fumble" ? "fumble return" : gameTotals.longestPlay.type === "run" ? "run" : "pass", ")"), Object.keys(qbStats).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     className: "text-xs uppercase tracking-widest text-muted-4 mb-2 font-semibold"
   }, "Passing"), /*#__PURE__*/React.createElement("div", {
     className: "card-panel overflow-hidden mb-6 overflow-x-auto"
@@ -3389,15 +3955,23 @@ function GameSummary({
     className: "text-right px-4 py-3"
   }, "Rush"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rush Yds"), /*#__PURE__*/React.createElement("th", {
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rush TD"), /*#__PURE__*/React.createElement("th", {
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Long"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Rec"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rec Yds"), /*#__PURE__*/React.createElement("th", {
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rec TD"), /*#__PURE__*/React.createElement("th", {
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Long"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, fullPlayerRows.map(p => {
     const s = stats[p.id] || emptyPlayerStats();
@@ -3412,11 +3986,19 @@ function GameSummary({
       className: "px-4 py-3 text-right font-mono"
     }, s.rushYards), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
+    }, s.rushAtt ? (s.rushYards / s.rushAtt).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.longestRush), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
     }, s.rushTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.rec), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.recYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.rec ? (s.recYards / s.rec).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.longestRec), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.recTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3513,10 +4095,21 @@ function GameSummary({
     team: settings,
     opponent: game.opponent,
     scoringPlayIds: scoringPlayIds,
+    onEdit: setEditingPlay,
     onDelete: () => setConfirmDeletePlay(p)
   })), game.plays.length === 0 && /*#__PURE__*/React.createElement("p", {
     className: "text-muted-4 text-sm"
-  }, "No plays were logged.")), confirmDelete && /*#__PURE__*/React.createElement(ConfirmDialog, {
+  }, "No plays were logged.")), editingPlay && /*#__PURE__*/React.createElement(PlayFormModal, {
+    draft: {
+      type: editingPlay.type
+    },
+    roster: presentRoster,
+    currentQBId: derived.currentQBId,
+    possession: editingPlay.possession || derived.possession,
+    initialPlay: editingPlay,
+    onCancel: () => setEditingPlay(null),
+    onConfirm: handleEditConfirm
+  }), confirmDelete && /*#__PURE__*/React.createElement(ConfirmDialog, {
     title: "Delete this game?",
     message: "This removes the game and its full play log. This can't be undone.",
     confirmLabel: "Delete game",
@@ -3576,6 +4169,90 @@ function NewSeasonModal({
     className: "btn-primary w-full text-base mt-3 disabled-dim-60"
   }, "Start season")));
 }
+function PlayerGameLogModal({
+  player,
+  games,
+  onClose
+}) {
+  const rows = games.filter(g => g.status === "final" && (g.presentIds || []).includes(player.id)).sort((a, b) => (a.date || "").localeCompare(b.date || "")).map(g => ({
+    game: g,
+    stats: computePlayerStats(g)[player.id] || emptyPlayerStats()
+  }));
+  const hasOffense = rows.some(r => r.stats.rushAtt > 0 || r.stats.rec > 0);
+  const hasDefense = rows.some(r => r.stats.tackles > 0 || r.stats.sacks > 0 || r.stats.interceptions > 0 || r.stats.fumbleRecoveries > 0);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-scrim-60 flex items-end sm:items-center justify-center z-40 px-0 sm:px-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-panel rounded-b-none sm:rounded-2xl rounded-t-2xl w-full max-w-lg p-6 pb-9 sm:pb-6",
+    style: {
+      maxHeight: "85vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between mb-5"
+  }, /*#__PURE__*/React.createElement("h3", {
+    className: "font-bold text-xl"
+  }, player.name, " — game log"), /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "p-2 -mr-2 text-muted-3"
+  }, /*#__PURE__*/React.createElement(X, {
+    size: 20
+  }))), rows.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-4"
+  }, "No completed games yet this season with ", player.name, " marked present.") : /*#__PURE__*/React.createElement("div", {
+    className: "overflow-x-auto"
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "w-full text-sm"
+  }, /*#__PURE__*/React.createElement("thead", {
+    className: "bg-overlay-5 text-muted-3 text-xs uppercase"
+  }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-3 py-2"
+  }, "Date"), /*#__PURE__*/React.createElement("th", {
+    className: "text-left px-3 py-2"
+  }, "Opp"), hasOffense && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Rush"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Rec"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "TD")), hasDefense && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Tkl"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "Sck"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-3 py-2"
+  }, "INT")))), /*#__PURE__*/React.createElement("tbody", null, rows.map(({
+    game,
+    stats: s
+  }) => /*#__PURE__*/React.createElement("tr", {
+    key: game.id,
+    className: "border-t border-soft-5"
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 font-mono text-xs"
+  }, game.date), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2"
+  }, game.opponent), hasOffense && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.rushAtt), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.rushYards), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.rec), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.recYards), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.rushTDs + s.recTDs)), hasDefense && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.tackles), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.sacks), /*#__PURE__*/React.createElement("td", {
+    className: "px-3 py-2 text-right font-mono"
+  }, s.interceptions)))))))));
+}
 function SeasonStats({
   team,
   onBack,
@@ -3586,6 +4263,7 @@ function SeasonStats({
   const [games, setGames] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(team.season || String(new Date().getFullYear()));
   const [newSeasonOpen, setNewSeasonOpen] = useState(false);
+  const [viewingPlayerLog, setViewingPlayerLog] = useState(null);
   useEffect(() => {
     const unsub = gamesCol(team.id).onSnapshot(snap => {
       setGames(snap.docs.map(d => ({
@@ -3623,12 +4301,14 @@ function SeasonStats({
   const rosterById = Object.fromEntries((team.roster || []).map(p => [p.id, p]));
   const playerTotals = useMemo(() => {
     const totals = {};
-    const STAT_KEYS = ["rushAtt", "rushYards", "rushTDs", "rec", "recYards", "recTDs", "turnovers", "tackles", "sacks", "interceptions", "interceptionReturnYards", "fumbleRecoveries", "fumbleReturnYards", "defTDs", "punts", "puntYards", "puntReturns", "puntReturnYards", "twoPtConv"];
+    const SUM_KEYS = ["rushAtt", "rushYards", "rushTDs", "rec", "recYards", "recTDs", "turnovers", "tackles", "sacks", "interceptions", "interceptionReturnYards", "fumbleRecoveries", "fumbleReturnYards", "defTDs", "punts", "puntYards", "puntReturns", "puntReturnYards", "twoPtConv"];
+    const MAX_KEYS = ["longestRush", "longestRec"];
     const emptyTotal = () => {
       const o = {
         games: new Set()
       };
-      STAT_KEYS.forEach(k => o[k] = 0);
+      SUM_KEYS.forEach(k => o[k] = 0);
+      MAX_KEYS.forEach(k => o[k] = 0);
       return o;
     };
     for (const p of team.roster || []) {
@@ -3642,11 +4322,31 @@ function SeasonStats({
       const gameTotals = computePlayerStats(g);
       for (const [pid, s] of Object.entries(gameTotals)) {
         if (!totals[pid]) totals[pid] = emptyTotal();
-        STAT_KEYS.forEach(k => totals[pid][k] += s[k] || 0);
+        SUM_KEYS.forEach(k => totals[pid][k] += s[k] || 0);
+        MAX_KEYS.forEach(k => totals[pid][k] = Math.max(totals[pid][k], s[k] || 0));
       }
     }
     return totals;
   }, [filteredGames, team.roster]);
+  const seasonTotals = useMemo(() => {
+    let totalYards = 0,
+      totalPlays = 0,
+      longestPlay = null;
+    for (const g of filteredGames) {
+      if (g.status !== "final") continue;
+      const gt = computeGameTotals(g);
+      totalYards += gt.totalYards;
+      totalPlays += gt.totalPlays;
+      if (gt.longestPlay && (!longestPlay || gt.longestPlay.yards > longestPlay.yards)) {
+        longestPlay = gt.longestPlay;
+      }
+    }
+    return {
+      totalYards,
+      totalPlays,
+      longestPlay
+    };
+  }, [filteredGames]);
   const qbTotals = useMemo(() => {
     const totals = {};
     for (const g of filteredGames) {
@@ -3682,11 +4382,15 @@ function SeasonStats({
   const sortedDefenseIds = Object.keys(playerTotals).filter(pid => playerTotals[pid].tackles > 0 || playerTotals[pid].sacks > 0 || playerTotals[pid].interceptions > 0 || playerTotals[pid].fumbleRecoveries > 0).sort((a, b) => playerTotals[b].tackles - playerTotals[a].tackles);
   const sortedSpecialTeamsIds = Object.keys(playerTotals).filter(pid => playerTotals[pid].punts > 0 || playerTotals[pid].puntReturns > 0).sort((a, b) => playerTotals[b].punts - playerTotals[a].punts);
   function exportCSV() {
-    const rows = [["Player", "Games Played", "Rush Att", "Rush Yds", "Rush TD", "Rec", "Rec Yds", "Rec TD", "Turnovers"]];
+    const rows = [["Team totals"]];
+    rows.push(["Total Yards", "Total Plays", "Yds/Play", "Longest Play"]);
+    rows.push([seasonTotals.totalYards, seasonTotals.totalPlays, seasonTotals.totalPlays ? (seasonTotals.totalYards / seasonTotals.totalPlays).toFixed(1) : "0.0", seasonTotals.longestPlay ? `${seasonTotals.longestPlay.yards} yds (${seasonTotals.longestPlay.type})` : ""]);
+    rows.push([]);
+    rows.push(["Player", "Games Played", "Rush Att", "Rush Yds", "Rush Avg", "Rush Long", "Rush TD", "Rec", "Rec Yds", "Rec Avg", "Rec Long", "Rec TD", "Turnovers"]);
     sortedIds.forEach(pid => {
       var _rosterById$pid3;
       const s = playerTotals[pid];
-      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.rushAtt, s.rushYards, s.rushTDs, s.rec, s.recYards, s.recTDs, s.turnovers]);
+      rows.push([((_rosterById$pid3 = rosterById[pid]) === null || _rosterById$pid3 === void 0 ? void 0 : _rosterById$pid3.name) || "Unknown", s.games.size, s.rushAtt, s.rushYards, s.rushAtt ? (s.rushYards / s.rushAtt).toFixed(1) : "0.0", s.longestRush, s.rushTDs, s.rec, s.recYards, s.rec ? (s.recYards / s.rec).toFixed(1) : "0.0", s.longestRec, s.recTDs, s.turnovers]);
     });
     rows.push([]);
     rows.push(["QB", "Games Played", "Completions", "Attempts", "Pass Yards", "Pass TDs", "INTs", "Sacks"]);
@@ -3760,6 +4464,21 @@ function SeasonStats({
     label: "Points against",
     value: record.pa
   })), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-3 gap-3 mb-6"
+  }, /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Total yards",
+    value: seasonTotals.totalYards
+  }), /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Total plays",
+    value: seasonTotals.totalPlays
+  }), /*#__PURE__*/React.createElement(StatBlock, {
+    label: "Yds/play",
+    value: seasonTotals.totalPlays ? (seasonTotals.totalYards / seasonTotals.totalPlays).toFixed(1) : "0.0"
+  })), seasonTotals.longestPlay && /*#__PURE__*/React.createElement("p", {
+    className: "text-sm text-muted-2 mb-6"
+  }, "Longest play this season: ", /*#__PURE__*/React.createElement("span", {
+    className: "text-primary font-semibold"
+  }, seasonTotals.longestPlay.yards, " yards"), seasonTotals.longestPlay.playerId && rosterById[seasonTotals.longestPlay.playerId] ? ` by ${rosterById[seasonTotals.longestPlay.playerId].name}` : ""), /*#__PURE__*/React.createElement("div", {
     className: "flex space-x-3 mb-6 no-print"
   }, sortedIds.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: exportCSV,
@@ -3803,7 +4522,10 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid7 = rosterById[pid]) === null || _rosterById$pid7 === void 0 ? void 0 : _rosterById$pid7.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => rosterById[pid] && setViewingPlayerLog(rosterById[pid]),
+      className: "hover-text-gold text-left"
+    }, ((_rosterById$pid7 = rosterById[pid]) === null || _rosterById$pid7 === void 0 ? void 0 : _rosterById$pid7.name) || "Unknown")), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3832,15 +4554,23 @@ function SeasonStats({
     className: "text-right px-4 py-3"
   }, "Rush"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rush Yds"), /*#__PURE__*/React.createElement("th", {
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rush TD"), /*#__PURE__*/React.createElement("th", {
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Long"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "Rec"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rec Yds"), /*#__PURE__*/React.createElement("th", {
+  }, "Yds"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
-  }, "Rec TD"), /*#__PURE__*/React.createElement("th", {
+  }, "Avg"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "Long"), /*#__PURE__*/React.createElement("th", {
+    className: "text-right px-4 py-3"
+  }, "TD"), /*#__PURE__*/React.createElement("th", {
     className: "text-right px-4 py-3"
   }, "TOs"))), /*#__PURE__*/React.createElement("tbody", null, sortedIds.map(pid => {
     var _rosterById$pid8;
@@ -3850,7 +4580,10 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid8 = rosterById[pid]) === null || _rosterById$pid8 === void 0 ? void 0 : _rosterById$pid8.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => rosterById[pid] && setViewingPlayerLog(rosterById[pid]),
+      className: "hover-text-gold text-left"
+    }, ((_rosterById$pid8 = rosterById[pid]) === null || _rosterById$pid8 === void 0 ? void 0 : _rosterById$pid8.name) || "Unknown")), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3858,11 +4591,19 @@ function SeasonStats({
       className: "px-4 py-3 text-right font-mono"
     }, s.rushYards), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
+    }, s.rushAtt ? (s.rushYards / s.rushAtt).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.longestRush), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
     }, s.rushTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.rec), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.recYards), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.rec ? (s.recYards / s.rec).toFixed(1) : "0.0"), /*#__PURE__*/React.createElement("td", {
+      className: "px-4 py-3 text-right font-mono"
+    }, s.longestRec), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.recTDs), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3897,7 +4638,10 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid9 = rosterById[pid]) === null || _rosterById$pid9 === void 0 ? void 0 : _rosterById$pid9.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => rosterById[pid] && setViewingPlayerLog(rosterById[pid]),
+      className: "hover-text-gold text-left"
+    }, ((_rosterById$pid9 = rosterById[pid]) === null || _rosterById$pid9 === void 0 ? void 0 : _rosterById$pid9.name) || "Unknown")), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3940,7 +4684,10 @@ function SeasonStats({
       className: "border-t border-soft-5"
     }, /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 font-medium"
-    }, ((_rosterById$pid0 = rosterById[pid]) === null || _rosterById$pid0 === void 0 ? void 0 : _rosterById$pid0.name) || "Unknown"), /*#__PURE__*/React.createElement("td", {
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => rosterById[pid] && setViewingPlayerLog(rosterById[pid]),
+      className: "hover-text-gold text-left"
+    }, ((_rosterById$pid0 = rosterById[pid]) === null || _rosterById$pid0 === void 0 ? void 0 : _rosterById$pid0.name) || "Unknown")), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
     }, s.games.size), /*#__PURE__*/React.createElement("td", {
       className: "px-4 py-3 text-right font-mono"
@@ -3980,6 +4727,10 @@ function SeasonStats({
     currentSeason: selectedSeason,
     onCancel: () => setNewSeasonOpen(false),
     onConfirm: startNewSeason
+  }), viewingPlayerLog && /*#__PURE__*/React.createElement(PlayerGameLogModal, {
+    player: viewingPlayerLog,
+    games: filteredGames,
+    onClose: () => setViewingPlayerLog(null)
   }));
 }
 function StatBlock({
